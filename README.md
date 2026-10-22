@@ -4,7 +4,7 @@ Un RPG mobile d'aventure : **explorer, se lier d'amitié avec des monstres et vi
 
 Projet natif **Unreal Engine 5.8**, paysage, solo hors ligne. Direction visée : personnages 2D en pixel art dans des décors 3D simples, avec une caméra fixe et une lumière soignée. Dragon Quest V inspire le sentiment d'aventure ; Octopath Traveler et Tactics Ogre: Reborn sont des références visuelles, avec des personnages et un univers originaux.
 
-## État du projet — 0.2
+## État du projet — 0.3
 
 Socle de code et scène de test 3D générée au lancement, maintenant reliés aux sprites du héros et des trois monstres. **Les 15 images sources et 10 atlas sont inclus ; les assets Paper2D sont construits automatiquement au premier lancement de l'éditeur.** Les décors restent géométriques. La compilation Unreal et le rendu sur appareil n'ont pas encore été validés ; aucun APK n'est fourni.
 
@@ -12,7 +12,10 @@ Fonctionnalités implémentées dans le code :
 
 - Déplacement au clavier, à la souris ou au doigt avec un glissement de type joystick flottant.
 - Petite zone 3D, gardienne et créature avec interaction à proximité.
-- Combat au tour par tour : attaquer, tenter une amitié, reculer.
+- Combat au tour par tour : attaquer, utiliser une technique, tenter une amitié, relayer un compagnon ou reculer.
+- XP, niveaux 1–20 et statistiques propres à chaque espèce ; neuf techniques apprises aux niveaux 1, 3 et 5.
+- Équipe de trois et réserve, menu de gestion et remplacement après K.-O.
+- PV/PM conservés ; sauvegardes du premier prototype migrées sans supprimer la collection.
 - Recrutement favorisé par l'affaiblissement ; une tentative ratée provoque une riposte.
 - Collection persistante et changement du compagnon actif hors combat.
 - Courte quête originale : **La lanterne du passeur**.
@@ -23,7 +26,7 @@ Fonctionnalités implémentées dans le code :
 - Carnet en jeu avec cinq planches de chara design, dont le frère en tenue élégante.
 - Module Editor d'import reproductible : 160 sprites, 40 flipbooks, 15 textures.
 
-**Validation :** les règles de combat/recrutement, les directions de sprites et les atlas ont des tests autonomes. Unreal Editor/UnrealBuildTool ne sont pas présents dans l'environnement de création : la compilation du module, l'ouverture de la scène et l'export Android/iOS restent à valider sur une machine équipée. Une réussite de la CI des règles ne prouve pas que le projet Unreal compile.
+**Validation :** les règles de combat/recrutement, la progression/les techniques/les relais, les directions de sprites et les atlas ont des tests autonomes. Unreal Editor/UnrealBuildTool ne sont pas présents dans l'environnement de création : la compilation du module, l'ouverture de la scène et l'export Android/iOS restent à valider sur une machine équipée. Une réussite de la CI des règles ne prouve pas que le projet Unreal compile.
 
 ## Premier lancement
 
@@ -32,13 +35,13 @@ Fonctionnalités implémentées dans le code :
 3. Ouvrir `FinalTower.uproject` et accepter la génération/compilation des modules ; ou générer les fichiers de projet puis compiler la cible `FinalTowerEditor` en Development Editor.
 4. Attendre la fin de l'import automatique des images (`FINAL TOWER art ready` dans le journal), puis lancer **Play**. La carte de démarrage `/Engine/Maps/Entry` reçoit le mode de jeu natif, qui construit la scène de test.
 
-Voir [le guide de démarrage](Docs/DEMARRAGE.md) pour les contrôles et [le guide des images](Docs/ART.md) pour l'import automatique, le Carnet et la cuisson mobile.
+Voir [le guide de démarrage](Docs/DEMARRAGE.md) pour les contrôles et [le guide des images](Docs/ART.md) pour l'import automatique, le Carnet et la cuisson mobile. Les [règles de progression](Docs/PROGRESSION.md) détaillent les techniques, l'équipe et les sauvegardes.
 
 ## Essayer la boucle
 
 Approcher la **Gardienne**, puis choisir **Interagir**. Lire ses trois répliques. Rejoindre la **Lumière des roseaux**, interagir et attaquer avec modération : un monstre vaincu ne peut pas être recruté durant ce combat. Choisir **Tendre la main**, puis retourner auprès de la gardienne une fois Luciolle recrutée.
 
-Une victoire sans recrutement laisse la rencontre disponible ; la défaite soigne l'équipe ; reculer conserve les PV restants. La gardienne soigne les compagnons. La position du héros n'est pas sauvegardée : on reprend au centre de la zone.
+Après victoire ou recrutement, les rencontres d'essai réapparaissent au bout de 12 secondes. Une défaite soigne l'équipe ; reculer conserve les PV et PM restants. La gardienne repose les compagnons. La position du héros n'est pas sauvegardée : on reprend au centre de la zone.
 
 ## Organisation
 

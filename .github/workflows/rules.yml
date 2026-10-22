@@ -16,6 +16,10 @@ jobs:
         run: g++ -std=c++17 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -I Source/FinalTower/Public Tests/battle_rules_test.cpp -o /tmp/finaltower-rules
       - name: Check combat and recruitment edge cases
         run: /tmp/finaltower-rules
+      - name: Check progression, techniques, relays and save migration rules
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -I Source/FinalTower/Public Tests/progression_rules_test.cpp -o /tmp/finaltower-progression
+          /tmp/finaltower-progression
       - name: Compile and check camera-relative sprite directions
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I Source/FinalTower/Public Tests/sprite_rules_test.cpp -o /tmp/finaltower-sprites

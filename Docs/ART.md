@@ -54,7 +54,7 @@ Modifier le catalogue avant une régénération. Le manifeste contient les SHA-2
 - Caméra et sol : sprites tournés vers la caméra, pieds ancrés sans clipping majeur avec le décor.
 - Mousse visible près du héros ; Luciolle et Roncinet visibles à leurs positions, animés et interactifs.
 - Attaquer et recruter : gestes du héros joués ; Roncinet recruté avec un message adapté, sans déclencher la quête de Luciolle.
-- Changer de compagnon : visuel mis à jour ; créature recrutée retirée de son point de rencontre.
+- Changer de compagnon : visuel mis à jour ; créature recrutée retirée de son point de rencontre puis remplacée par une nouvelle rencontre après 12 secondes (0.3).
 - Carnet : cinq pages, navigation et fermeture ; chaque aperçu du héros se termine après trois secondes et rend le contrôle.
 - Arrêter puis relancer : pas de second import si rien n'a changé ; sauvegarde du roster conservée.
 - Build Development Android : assets présents après cuisson, transparence correcte, mémoire et temps d'image mesurés.

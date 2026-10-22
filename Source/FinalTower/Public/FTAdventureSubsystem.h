@@ -16,6 +16,9 @@ struct FINALTOWER_API FFTMonsterSpecies
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 MaxHP = 30;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Attack = 6;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Defense = 1;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 MaxMP = 10;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Magic = 7;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FString Role;
 };
 
 USTRUCT(BlueprintType)
@@ -26,6 +29,36 @@ struct FINALTOWER_API FFTMonsterFriend
     UPROPERTY(SaveGame, BlueprintReadOnly) FGuid InstanceId;
     UPROPERTY(SaveGame, BlueprintReadOnly) FName SpeciesId;
     UPROPERTY(SaveGame, BlueprintReadOnly) int32 HP = 1;
+    UPROPERTY(SaveGame, BlueprintReadOnly) int32 MP = -1;
+    UPROPERTY(SaveGame, BlueprintReadOnly) int32 Experience = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FINALTOWER_API FFTMonsterStats
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadOnly) int32 Level = 1;
+    UPROPERTY(BlueprintReadOnly) int32 HP = 0;
+    UPROPERTY(BlueprintReadOnly) int32 MaxHP = 1;
+    UPROPERTY(BlueprintReadOnly) int32 MP = 0;
+    UPROPERTY(BlueprintReadOnly) int32 MaxMP = 0;
+    UPROPERTY(BlueprintReadOnly) int32 Attack = 1;
+    UPROPERTY(BlueprintReadOnly) int32 Defense = 0;
+    UPROPERTY(BlueprintReadOnly) int32 Magic = 0;
+    UPROPERTY(BlueprintReadOnly) int32 Experience = 0;
+    UPROPERTY(BlueprintReadOnly) int32 NextLevelXP = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FINALTOWER_API FFTMonsterTechnique
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadOnly) FString Name;
+    UPROPERTY(BlueprintReadOnly) FString Description;
+    UPROPERTY(BlueprintReadOnly) int32 UnlockLevel = 1;
+    UPROPERTY(BlueprintReadOnly) int32 MPCost = 0;
+    UPROPERTY(BlueprintReadOnly) bool bLearned = false;
+    UPROPERTY(BlueprintReadOnly) bool bUsable = false;
 };
 
 UCLASS()
@@ -33,11 +66,12 @@ class FINALTOWER_API UFTAdventureSave : public USaveGame
 {
     GENERATED_BODY()
 public:
-    UPROPERTY(SaveGame) int32 Version = 1;
+    UPROPERTY(SaveGame) int32 Version = 2;
     UPROPERTY(SaveGame) TArray<FFTMonsterFriend> Friends;
     UPROPERTY(SaveGame) bool bHeardKeeper = false;
     UPROPERTY(SaveGame) bool bStoryComplete = false;
     UPROPERTY(SaveGame) int32 ActiveFriend = 0;
+    UPROPERTY(SaveGame) TArray<int32> Party;
 };
 
 /** Session state shared by the native prototype and future Blueprint/UI assets. */
@@ -52,6 +86,8 @@ public:
     UPROPERTY(BlueprintReadOnly) TArray<FFTMonsterFriend> Friends;
     UPROPERTY(BlueprintReadOnly) int32 ActiveFriend = 0;
     UPROPERTY(BlueprintReadOnly) bool bInBattle = false;
+    UPROPERTY(BlueprintReadOnly) bool bAwaitingReplacement = false;
+    UPROPERTY(BlueprintReadOnly) TArray<int32> Party;
     UPROPERTY(BlueprintReadOnly) bool bHeardKeeper = false;
     UPROPERTY(BlueprintReadOnly) bool bStoryComplete = false;
     UPROPERTY(BlueprintReadOnly) FString Message;
@@ -66,20 +102,30 @@ public:
     UFUNCTION(BlueprintCallable) bool SaveProgress();
     UFUNCTION(BlueprintCallable) bool LoadProgress();
     UFUNCTION(BlueprintCallable) void NextCompanion();
+    UFUNCTION(BlueprintCallable) bool UseSkill(int32 SkillIndex);
+    UFUNCTION(BlueprintCallable) bool SetActiveFriend(int32 RosterIndex);
+    UFUNCTION(BlueprintCallable) bool TogglePartyMember(int32 RosterIndex);
+    UFUNCTION(BlueprintPure) FFTMonsterStats GetFriendStats(int32 RosterIndex) const;
+    UFUNCTION(BlueprintPure) TArray<FFTMonsterTechnique> GetTechniques(int32 RosterIndex) const;
     UFUNCTION(BlueprintPure) bool HasFriend(FName SpeciesId) const;
     UFUNCTION(BlueprintPure) FString GetObjective() const;
 
     const FFTMonsterSpecies* FindSpecies(FName Id) const;
     const FinalTowerRules::Battle& GetBattle() const { return Battle; }
     const FFTMonsterSpecies* GetEnemySpecies() const { return FindSpecies(EnemyId); }
+    int32 GetEnemyLevel() const { return EnemyLevel; }
+    FName GetEncounterId() const { return EnemyId; }
 
 private:
     FinalTowerRules::Battle Battle;
     FName EnemyId;
+    int32 EnemyLevel = 1;
+    TSet<FGuid> BattleParticipants;
     TArray<FString> DialogueLines;
     int32 DialogueIndex = 0;
     bool bFinishStoryAfterDialogue = false;
-    void AddFriend(FName SpeciesId);
+    void AddFriend(FName SpeciesId, int32 Level = 1, int32 HP = -1);
     void FinishAction();
     void HealFriends();
+    FString AwardExperience();
 };

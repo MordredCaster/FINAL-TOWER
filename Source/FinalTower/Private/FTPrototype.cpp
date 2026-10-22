@@ -126,9 +126,9 @@ void AFTPrototypeController::PlayerTick(float DeltaTime)
     if (!bDown) bDragging = false;
     bPointerWasDown = bDown;
 
-    const AFTPrototypeHUD* UI = Cast<AFTPrototypeHUD>(GetHUD());
+    AFTPrototypeHUD* UI = Cast<AFTPrototypeHUD>(GetHUD());
     const AFTExplorer* Explorer = Cast<AFTExplorer>(GetPawn());
-    if ((UI && UI->IsArtBookOpen()) || (Explorer && Explorer->SpriteAnimator->IsMovementLocked()))
+    if ((UI && UI->IsMenuOpen()) || (Explorer && Explorer->SpriteAnimator->IsMovementLocked()))
     {
         if (GetPawn() && GetPawn()->GetMovementComponent()) GetPawn()->GetMovementComponent()->StopMovementImmediately();
         bDragging = false;
@@ -141,7 +141,11 @@ void AFTPrototypeController::PlayerTick(float DeltaTime)
         if (WasInputKeyJustPressed(EKeys::One)) BattleAction(TEXT("attack"));
         if (WasInputKeyJustPressed(EKeys::Two)) BattleAction(TEXT("recruit"));
         if (WasInputKeyJustPressed(EKeys::Three)) BattleAction(TEXT("escape"));
+        if (WasInputKeyJustPressed(EKeys::Four)) BattleAction(TEXT("skill_0"));
+        if (WasInputKeyJustPressed(EKeys::Five)) BattleAction(TEXT("skill_1"));
+        if (WasInputKeyJustPressed(EKeys::Six)) BattleAction(TEXT("skill_2"));
     }
+    if (WasInputKeyJustPressed(EKeys::Tab) && UI && State->Dialogue.IsEmpty()) UI->OpenTeam();
 
     APawn* Controlled = GetPawn();
     if (!Controlled) return;
@@ -182,7 +186,7 @@ void AFTPrototypeController::Interact()
 void AFTPrototypeController::BattleAction(FName Action)
 {
     UFTAdventureSubsystem* State = Adventure(this);
-    if (!State || !State->bInBattle) return;
+    if (!State || !State->bInBattle || State->bAwaitingReplacement) return;
     AFTExplorer* Explorer = Cast<AFTExplorer>(GetPawn());
     if (Action == TEXT("attack"))
     {
@@ -195,6 +199,15 @@ void AFTPrototypeController::BattleAction(FName Action)
         State->Recruit();
     }
     else if (Action == TEXT("escape")) State->Escape();
+    else if (Action.ToString().StartsWith(TEXT("skill_")))
+    {
+        const int32 Index = FCString::Atoi(*Action.ToString().RightChop(6));
+        if (State->UseSkill(Index) && Explorer)
+        {
+            const bool Physical = State->Friends[State->ActiveFriend].SpeciesId == TEXT("roncinet") && Index != 1;
+            Explorer->SpriteAnimator->PlayAction(Physical ? TEXT("combat") : TEXT("spell"));
+        }
+    }
 }
 
 AFTPrototypeGameMode::AFTPrototypeGameMode()
@@ -283,8 +296,15 @@ void AFTPrototypeGameMode::Tick(float DeltaSeconds)
     Super::Tick(DeltaSeconds);
     const UFTAdventureSubsystem* State = Adventure(this);
     if (!State) return;
-    if (EncounterMarker) EncounterMarker->SetActorHiddenInGame(State->HasFriend(TEXT("luciolle")));
-    if (Roncinet) Roncinet->SetActorHiddenInGame(State->HasFriend(TEXT("roncinet")));
+    if (bWasInBattle && !State->bInBattle &&
+        (State->GetBattle().Result == FinalTowerRules::Outcome::Victory || State->GetBattle().Result == FinalTowerRules::Outcome::Recruited))
+    {
+        if (State->GetEncounterId() == TEXT("luciolle")) LuciolleRespawnAt = GetWorld()->GetTimeSeconds() + 12;
+        if (State->GetEncounterId() == TEXT("roncinet")) RoncinetRespawnAt = GetWorld()->GetTimeSeconds() + 12;
+    }
+    bWasInBattle = State->bInBattle;
+    if (EncounterMarker) EncounterMarker->SetActorHiddenInGame(!IsEncounterAvailable(TEXT("luciolle")));
+    if (Roncinet) Roncinet->SetActorHiddenInGame(!IsEncounterAvailable(TEXT("roncinet")));
     if (const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0))
     {
         if (AFTMonsterVisual* Light = Cast<AFTMonsterVisual>(EncounterMarker)) Light->FacePlayer(Player->GetActorLocation());
@@ -309,12 +329,18 @@ void AFTPrototypeGameMode::InteractAt(const FVector& Position)
     if (!State || State->bInBattle) return;
     if (FVector::Dist2D(Position, KeeperPosition()) < 170)
         State->TalkToKeeper();
-    else if (!State->HasFriend(TEXT("luciolle")) && FVector::Dist2D(Position, EncounterPosition()) < 170)
+    else if (IsEncounterAvailable(TEXT("luciolle")) && FVector::Dist2D(Position, EncounterPosition()) < 170)
         State->BeginEncounter(TEXT("luciolle"));
-    else if (!State->HasFriend(TEXT("roncinet")) && FVector::Dist2D(Position, RoncinetPosition()) < 170)
+    else if (IsEncounterAvailable(TEXT("roncinet")) && FVector::Dist2D(Position, RoncinetPosition()) < 170)
         State->BeginEncounter(TEXT("roncinet"));
     else
         State->Message = TEXT("Approchez de la gardienne, de Luciolle ou de Roncinet, puis touchez Interagir.");
+}
+
+bool AFTPrototypeGameMode::IsEncounterAvailable(FName Id) const
+{
+    const float Time = GetWorld()->GetTimeSeconds();
+    return Id == TEXT("luciolle") ? Time >= LuciolleRespawnAt : Time >= RoncinetRespawnAt;
 }
 
 void AFTPrototypeHUD::Label(const FString& Text, float X, float Y, FLinearColor Color, float TextScale)
@@ -344,11 +370,12 @@ void AFTPrototypeHUD::Wrapped(const FString& Text, float X, float Y, float Width
     if (!Line.IsEmpty()) Label(Line, X, Y);
 }
 
-void AFTPrototypeHUD::Button(FName Action, const FString& Text, float X, float Y, float Width)
+void AFTPrototypeHUD::Button(FName Action, const FString& Text, float X, float Y, float Width, bool bEnabled)
 {
-    DrawRect(FLinearColor(0.1f, 0.2f, 0.26f, 0.96f), X * Scale, Y * Scale, Width * Scale, 54 * Scale);
-    Label(Text, X + 12, Y + 15);
-    Buttons.Add({ Action, FVector2D(X, Y) * Scale, FVector2D(Width, 54) * Scale });
+    DrawRect(bEnabled ? FLinearColor(0.1f, 0.2f, 0.26f, 0.96f) : FLinearColor(0.10f, 0.11f, 0.12f, 0.96f),
+        X * Scale, Y * Scale, Width * Scale, 54 * Scale);
+    Label(Text, X + 12, Y + 15, bEnabled ? FLinearColor::White : FLinearColor(0.5f, 0.5f, 0.5f));
+    if (bEnabled) Buttons.Add({ Action, FVector2D(X, Y) * Scale, FVector2D(Width, 54) * Scale });
 }
 
 void AFTPrototypeHUD::DrawHUD()
@@ -361,10 +388,12 @@ void AFTPrototypeHUD::DrawHUD()
     Scale = FMath::Max(0.1f, static_cast<float>(Canvas->SizeY) / 720.0f);
     ViewWidth = Canvas->SizeX / Scale;
     ViewHeight = 720;
+    if (State->bAwaitingReplacement) bTeamOpen = true;
+    if (bTeamOpen) { DrawTeam(); return; }
     if (bArtBookOpen) { DrawArtBook(); return; }
     const float Margin = 40;
     DrawRect(FLinearColor(0.025f, 0.05f, 0.075f, 0.94f), 0, 0, Canvas->SizeX, 126 * Scale);
-    Label(TEXT("FINAL TOWER — prototype 0.2"), Margin, 20, FLinearColor(1, 0.8, 0.4));
+    Label(TEXT("FINAL TOWER — prototype 0.3"), Margin, 20, FLinearColor(1, 0.8, 0.4));
     Wrapped(State->GetObjective(), Margin, 55, ViewWidth - 2 * Margin);
     Label(TEXT("Sprites 2D animés • Carnet : personnages, bestiaire et aperçus"), Margin, 96, FLinearColor(0.7, 0.75, 0.8), 0.8f);
 
@@ -374,8 +403,9 @@ void AFTPrototypeHUD::DrawHUD()
         const FFTMonsterSpecies* Entry = State->FindSpecies(Friend.SpeciesId);
         if (Entry)
         {
-            const int32 HP = State->bInBattle ? State->GetBattle().Ally.HP : Friend.HP;
-            Label(FString::Printf(TEXT("%s  %d/%d PV  |  Compagnons : %d"), *Entry->Name, HP, Entry->MaxHP, State->Friends.Num()), Margin, 145);
+            const FFTMonsterStats Stats = State->GetFriendStats(State->ActiveFriend);
+            Label(FString::Printf(TEXT("%s niv. %d  |  PV %d/%d  PM %d/%d  |  XP %d/%d"),
+                *Entry->Name, Stats.Level, Stats.HP, Stats.MaxHP, Stats.MP, Stats.MaxMP, Stats.Experience, Stats.NextLevelXP), Margin, 145);
         }
     }
 
@@ -383,8 +413,9 @@ void AFTPrototypeHUD::DrawHUD()
     {
         for (int32 Index = 0; Index < 3; ++Index)
         {
-            if (Index == 1 && State->HasFriend(TEXT("luciolle"))) continue;
-            if (Index == 2 && State->HasFriend(TEXT("roncinet"))) continue;
+            const AFTPrototypeGameMode* Mode = Cast<AFTPrototypeGameMode>(UGameplayStatics::GetGameMode(this));
+            if (Mode && Index == 1 && !Mode->IsEncounterAvailable(TEXT("luciolle"))) continue;
+            if (Mode && Index == 2 && !Mode->IsEncounterAvailable(TEXT("roncinet"))) continue;
             const FVector World = Index == 0 ? AFTPrototypeGameMode::KeeperPosition() :
                 (Index == 1 ? AFTPrototypeGameMode::EncounterPosition() : AFTPrototypeGameMode::RoncinetPosition());
             FVector2D Screen;
@@ -406,18 +437,30 @@ void AFTPrototypeHUD::DrawHUD()
     {
         const auto& Battle = State->GetBattle();
         const FFTMonsterSpecies* Enemy = State->GetEnemySpecies();
-        Label(FString::Printf(TEXT("%s  %d/%d PV — Amitié : %.0f %%"), Enemy ? *Enemy->Name : TEXT("Créature"),
-            Battle.Enemy.HP, Battle.Enemy.MaxHP, Battle.RecruitmentChance() * 100), Margin, PanelY + 18, FLinearColor(1, 0.8, 0.4));
+        Label(FString::Printf(TEXT("%s niv. %d  %d/%d PV — Amitié : %.0f %%"), Enemy ? *Enemy->Name : TEXT("Créature"),
+            State->GetEnemyLevel(), Battle.Enemy.HP, Battle.Enemy.MaxHP, Battle.RecruitmentChance() * 100), Margin, PanelY + 18, FLinearColor(1, 0.8, 0.4));
         Wrapped(State->Message, Margin, PanelY + 55, ViewWidth - 2 * Margin);
-        const float Width = FMath::Min(240.0f, (ViewWidth - 112) / 3);
-        Button(TEXT("attack"), TEXT("1. Attaquer"), Margin, 625, Width);
-        Button(TEXT("recruit"), TEXT("2. Tendre la main"), Margin + Width + 16, 625, Width);
-        Button(TEXT("escape"), TEXT("3. Reculer"), Margin + 2 * (Width + 16), 625, Width);
+        Label(FString::Printf(TEXT("Protection : %d riposte(s)  |  Ennemi affaibli : %d riposte(s)"), Battle.GuardTurns, Battle.WeakenTurns),
+            Margin, 540, FLinearColor(0.7f, 0.85f, 0.7f), 0.85f);
+        const auto Skills = State->GetTechniques(State->ActiveFriend);
+        const float SkillWidth = FMath::Min(280.0f, (ViewWidth - 112) / 3);
+        for (int32 Index = 0; Index < Skills.Num(); ++Index)
+        {
+            const auto& Skill = Skills[Index];
+            const FString Text = Skill.bLearned ? FString::Printf(TEXT("%d. %s · %d PM"), Index + 4, *Skill.Name, Skill.MPCost) :
+                FString::Printf(TEXT("Niv. %d : %s"), Skill.UnlockLevel, *Skill.Name);
+            Button(FName(*FString::Printf(TEXT("skill_%d"), Index)), Text, Margin + Index * (SkillWidth + 16), 570, SkillWidth, Skill.bUsable);
+        }
+        const float Width = FMath::Min(240.0f, (ViewWidth - 128) / 4);
+        Button(TEXT("attack"), TEXT("1. Attaquer"), Margin, 642, Width);
+        Button(TEXT("recruit"), TEXT("2. Amitié"), Margin + Width + 16, 642, Width);
+        Button(TEXT("escape"), TEXT("3. Reculer"), Margin + 2 * (Width + 16), 642, Width);
+        Button(TEXT("team"), TEXT("Équipe · Tab"), Margin + 3 * (Width + 16), 642, Width);
     }
     else
     {
         Wrapped(State->Message, Margin, PanelY + 24, ViewWidth - 2 * Margin);
-        Button(TEXT("companion"), TEXT("Compagnon"), Margin, 625, 160);
+        Button(TEXT("companion"), TEXT("Équipe"), Margin, 625, 160);
         Button(TEXT("save"), TEXT("Sauver"), Margin + 176, 625, 110);
         Button(TEXT("artbook"), TEXT("Carnet"), Margin + 302, 625, 110);
         Button(TEXT("interact"), TEXT("Interagir"), ViewWidth - 230, 625, 190);
@@ -455,11 +498,22 @@ void AFTPrototypeHUD::Act(FName Action)
     {
         if (AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner)) Control->Interact();
     }
-    else if (Action == TEXT("attack") || Action == TEXT("recruit") || Action == TEXT("escape"))
+    else if (Action == TEXT("attack") || Action == TEXT("recruit") || Action == TEXT("escape") || Action.ToString().StartsWith(TEXT("skill_")))
     {
         if (AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner)) Control->BattleAction(Action);
     }
-    else if (Action == TEXT("companion")) State->NextCompanion();
+    else if (Action == TEXT("companion") || Action == TEXT("team")) OpenTeam();
+    else if (Action == TEXT("closeteam")) bTeamOpen = false;
+    else if (Action == TEXT("teamprev")) TeamPage = FMath::Max(0, TeamPage - 1);
+    else if (Action == TEXT("teamnext")) TeamPage = FMath::Min((State->Friends.Num() - 1) / 5, TeamPage + 1);
+    else if (Action.ToString().StartsWith(TEXT("lead_")))
+    {
+        const bool WasInBattle = State->bInBattle;
+        if (State->SetActiveFriend(FCString::Atoi(*Action.ToString().RightChop(5))) && WasInBattle)
+            bTeamOpen = State->bAwaitingReplacement;
+    }
+    else if (Action.ToString().StartsWith(TEXT("toggle_")))
+        State->TogglePartyMember(FCString::Atoi(*Action.ToString().RightChop(7)));
     else if (Action == TEXT("save"))
         State->Message = State->SaveProgress() ? TEXT("Compagnons et histoire sauvegardés.") : TEXT("Sauvegarde impossible. Réessayez.");
     else if (Action == TEXT("artbook")) { bArtBookOpen = true; ArtPage = 0; }
@@ -476,6 +530,60 @@ void AFTPrototypeHUD::Act(FName Action)
             bArtBookOpen = false;
         }
     }
+}
+
+void AFTPrototypeHUD::DrawTeam()
+{
+    UFTAdventureSubsystem* State = Adventure(this);
+    if (!State) return;
+    DrawRect(FLinearColor(0.025f, 0.035f, 0.05f, 1), 0, 0, Canvas->SizeX, Canvas->SizeY);
+    Label(FString::Printf(TEXT("ÉQUIPE %d/3 — collection : %d"), State->Party.Num(), State->Friends.Num()),
+        40, 20, FLinearColor(1, 0.8f, 0.4f));
+    Label(State->bInBattle ? TEXT("Un relais prend un tour. Après un K.-O., le remplacement est gratuit.") :
+        TEXT("Trois membres maximum. Les autres attendent en réserve ; Tab ouvre ce menu."), 40, 62);
+    TArray<int32> Displayed;
+    if (State->bInBattle) Displayed = State->Party;
+    else
+    {
+        TeamPage = FMath::Clamp(TeamPage, 0, FMath::Max(0, (State->Friends.Num() - 1) / 5));
+        for (int32 Index = TeamPage * 5; Index < FMath::Min(State->Friends.Num(), TeamPage * 5 + 5); ++Index) Displayed.Add(Index);
+    }
+    for (int32 Row = 0; Row < Displayed.Num(); ++Row)
+    {
+        const int32 Index = Displayed[Row];
+        const auto Stats = State->GetFriendStats(Index);
+        const FFTMonsterSpecies* Species = State->FindSpecies(State->Friends[Index].SpeciesId);
+        if (!Species) continue;
+        const float Y = 110 + Row * 86;
+        const bool Active = State->ActiveFriend == Index;
+        const bool InParty = State->Party.Contains(Index);
+        const FString Status = Active ? TEXT("Actif") : (InParty ? TEXT("Équipe") : TEXT("Réserve"));
+        Label(FString::Printf(TEXT("%s · %s N%d  PV %d/%d  PM %d/%d"), *Status, *Species->Name,
+            Stats.Level, Stats.HP, Stats.MaxHP, Stats.MP, Stats.MaxMP), 40, Y,
+            Active ? FLinearColor(1, 0.85f, 0.5f) : FLinearColor::White);
+        Label(FString::Printf(TEXT("%s · XP %d/%d · Att %d / Déf %d / Mag %d"), *Species->Role,
+            Stats.Experience, Stats.NextLevelXP, Stats.Attack, Stats.Defense, Stats.Magic), 40, Y + 25,
+            FLinearColor(0.75f, 0.8f, 0.85f), 0.8f);
+        FString Skills;
+        for (const auto& Skill : State->GetTechniques(Index))
+        {
+            if (!Skills.IsEmpty()) Skills += TEXT(" / ");
+            Skills += Skill.bLearned ? Skill.Name : FString::Printf(TEXT("%s (N%d)"), *Skill.Name, Skill.UnlockLevel);
+        }
+        Label(Skills, 40, Y + 48, FLinearColor(0.7f, 0.85f, 0.7f), 0.75f);
+        Button(FName(*FString::Printf(TEXT("lead_%d"), Index)), State->bInBattle ? TEXT("Relayer") : TEXT("En tête"),
+            ViewWidth - 310, Y + 8, 120, InParty && !Active && Stats.HP > 0);
+        if (!State->bInBattle)
+            Button(FName(*FString::Printf(TEXT("toggle_%d"), Index)), InParty ? TEXT("Réserve") : TEXT("Ajouter"),
+                ViewWidth - 174, Y + 8, 134, !InParty || State->Party.Num() > 1);
+    }
+    Wrapped(State->Message, 40, 558, ViewWidth - 80);
+    if (!State->bInBattle)
+    {
+        Button(TEXT("teamprev"), TEXT("Précédent"), 40, 642, 170, TeamPage > 0);
+        Button(TEXT("teamnext"), TEXT("Suivant"), 226, 642, 170, (TeamPage + 1) * 5 < State->Friends.Num());
+    }
+    if (!State->bAwaitingReplacement) Button(TEXT("closeteam"), TEXT("Fermer"), ViewWidth - 210, 642, 170);
 }
 
 void AFTPrototypeHUD::DrawArtBook()

@@ -68,6 +68,7 @@ public:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
     void InteractAt(const FVector& Position);
+    bool IsEncounterAvailable(FName Id) const;
 
     static FVector KeeperPosition() { return FVector(-220, -280, 50); }
     static FVector EncounterPosition() { return FVector(420, 320, 50); }
@@ -79,6 +80,9 @@ private:
     UPROPERTY() TObjectPtr<AActor> LanternMarker;
     UPROPERTY() TObjectPtr<AFTMonsterVisual> Roncinet;
     UPROPERTY() TObjectPtr<AFTMonsterVisual> Companion;
+    bool bWasInBattle = false;
+    float LuciolleRespawnAt = 0;
+    float RoncinetRespawnAt = 0;
     AActor* MakeShape(const TCHAR* MeshPath, const FVector& Location, const FVector& Scale, bool bCollision = false);
 };
 
@@ -89,7 +93,8 @@ class FINALTOWER_API AFTPrototypeHUD : public AHUD
 public:
     virtual void DrawHUD() override;
     bool HandleTap(FVector2D Position);
-    bool IsArtBookOpen() const { return bArtBookOpen; }
+    bool IsMenuOpen() const { return bArtBookOpen || bTeamOpen; }
+    void OpenTeam() { bTeamOpen = true; TeamPage = 0; }
 
 private:
     struct FButton
@@ -102,12 +107,15 @@ private:
     UPROPERTY() TArray<TObjectPtr<UTexture2D>> ArtPages;
     bool bArtBookOpen = false;
     int32 ArtPage = 0;
+    bool bTeamOpen = false;
+    int32 TeamPage = 0;
     float Scale = 1.0f;
     float ViewWidth = 1280.0f;
     float ViewHeight = 720.0f;
     void Label(const FString& Text, float X, float Y, FLinearColor Color = FLinearColor::White, float TextScale = 1.0f);
     void Wrapped(const FString& Text, float X, float Y, float Width);
-    void Button(FName Action, const FString& Text, float X, float Y, float Width);
+    void Button(FName Action, const FString& Text, float X, float Y, float Width, bool bEnabled = true);
     void Act(FName Action);
     void DrawArtBook();
+    void DrawTeam();
 };

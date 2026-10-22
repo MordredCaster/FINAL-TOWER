@@ -64,3 +64,7 @@ Ni compilation Unreal, ni cuisson, ni installation Android/iOS n'ont été exéc
 ## Personnaliser les graphismes
 
 Les images actuelles sont déjà reliées au code et importées automatiquement. Voir [ART.md](ART.md) pour leur usage, le découpage, les chemins et les vérifications. Pour remplacer un visuel, modifier les sources dans `ArtSource/` et régénérer les atlas avant de rouvrir l'éditeur. Les animations de marche des monstres et les sprites du frère restent à créer.
+
+## Progression et équipe (0.3)
+
+Le bouton Équipe ou Tab ouvre la gestion des trois membres actifs et de la réserve. En combat, les touches 4/5/6 lancent les techniques apprises ; les choix sans PM sont désactivés. Après un K.-O., choisir un remplaçant avant de continuer. Les rencontres de la zone de test réapparaissent après 12 secondes. Voir [PROGRESSION.md](PROGRESSION.md) pour les règles, la migration des sauvegardes et les contrôles.
