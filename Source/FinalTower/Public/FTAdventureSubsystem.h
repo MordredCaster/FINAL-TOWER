@@ -4,6 +4,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "GameFramework/SaveGame.h"
 #include "FTBattleRules.h"
+#include "FTExplorationRules.h"
 #include "FTAdventureSubsystem.generated.h"
 
 USTRUCT(BlueprintType)
@@ -72,18 +73,33 @@ struct FINALTOWER_API FFTInventoryItem
     UPROPERTY(BlueprintReadOnly) bool bUsableOnActive = false;
 };
 
+USTRUCT(BlueprintType)
+struct FINALTOWER_API FFTQuestEntry
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadOnly) FName Id;
+    UPROPERTY(BlueprintReadOnly) FString Title;
+    UPROPERTY(BlueprintReadOnly) FString Status;
+    UPROPERTY(BlueprintReadOnly) FString Objective;
+    UPROPERTY(BlueprintReadOnly) FString Clues;
+    UPROPERTY(BlueprintReadOnly) FString Reward;
+    UPROPERTY(BlueprintReadOnly) bool bComplete = false;
+};
+
 UCLASS()
 class FINALTOWER_API UFTAdventureSave : public USaveGame
 {
     GENERATED_BODY()
 public:
-    UPROPERTY(SaveGame) int32 Version = 3;
+    UPROPERTY(SaveGame) int32 Version = 4;
     UPROPERTY(SaveGame) TArray<FFTMonsterFriend> Friends;
     UPROPERTY(SaveGame) bool bHeardKeeper = false;
     UPROPERTY(SaveGame) bool bStoryComplete = false;
     UPROPERTY(SaveGame) int32 ActiveFriend = 0;
     UPROPERTY(SaveGame) TArray<int32> Party;
     UPROPERTY(SaveGame) TMap<FName, int32> Items;
+    UPROPERTY(SaveGame) TArray<FName> CollectedDiscoveries;
+    UPROPERTY(SaveGame) int32 WoundedStage = 0;
 };
 
 /** Session state shared by the native prototype and future Blueprint/UI assets. */
@@ -125,6 +141,13 @@ public:
     UFUNCTION(BlueprintPure) bool CanUseItem(FName ItemId, int32 TargetIndex) const;
     UFUNCTION(BlueprintPure) int32 GetItemQuantity(FName ItemId) const;
     UFUNCTION(BlueprintPure) TArray<FFTInventoryItem> GetInventory() const;
+    UFUNCTION(BlueprintCallable) bool CollectDiscovery(FName DiscoveryId);
+    UFUNCTION(BlueprintCallable) void TalkToWounded();
+    UFUNCTION(BlueprintPure) bool IsDiscoveryCollected(FName DiscoveryId) const;
+    UFUNCTION(BlueprintPure) int32 GetDiscoveryCount() const;
+    UFUNCTION(BlueprintPure) int32 GetWoundedStage() const;
+    UFUNCTION(BlueprintPure) bool IsWoundedFollowing() const;
+    UFUNCTION(BlueprintPure) TArray<FFTQuestEntry> GetQuests() const;
 
     const FFTMonsterSpecies* FindSpecies(FName Id) const;
     const FinalTowerRules::Battle& GetBattle() const { return Battle; }
@@ -138,12 +161,16 @@ private:
     int32 EnemyLevel = 1;
     TSet<FGuid> BattleParticipants;
     FinalTowerRules::Inventory Bag;
+    FinalTowerRules::Exploration WorldProgress;
     TArray<FString> DialogueLines;
     int32 DialogueIndex = 0;
     bool bFinishStoryAfterDialogue = false;
+    bool bKeeperDialogue = false;
+    bool bFinishWoundedAfterDialogue = false;
     void AddFriend(FName SpeciesId, int32 Level = 1, int32 HP = -1);
     void FinishAction();
     void HealFriends();
     FString AwardExperience();
     FString AwardItems();
+    FString GetLanternObjective() const;
 };

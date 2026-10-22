@@ -28,6 +28,10 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -I Source/FinalTower/Public Tests/inventory_rules_test.cpp -o /tmp/finaltower-inventory
           /tmp/finaltower-inventory
+      - name: Check discoveries, quest rewards and exploration migration rules
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -I Source/FinalTower/Public Tests/exploration_rules_test.cpp -o /tmp/finaltower-exploration
+          /tmp/finaltower-exploration
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

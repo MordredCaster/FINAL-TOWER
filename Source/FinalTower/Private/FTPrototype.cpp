@@ -130,6 +130,8 @@ void AFTPrototypeController::PlayerTick(float DeltaTime)
     const AFTExplorer* Explorer = Cast<AFTExplorer>(GetPawn());
     if (WasInputKeyJustPressed(EKeys::I) && UI && State->Dialogue.IsEmpty() && !State->bAwaitingReplacement)
         UI->ToggleInventory();
+    if (WasInputKeyJustPressed(EKeys::J) && UI && State->Dialogue.IsEmpty() && !State->bAwaitingReplacement)
+        UI->ToggleJournal();
     if ((UI && UI->IsMenuOpen()) || (Explorer && Explorer->SpriteAnimator->IsMovementLocked()))
     {
         if (GetPawn() && GetPawn()->GetMovementComponent()) GetPawn()->GetMovementComponent()->StopMovementImmediately();
@@ -267,6 +269,16 @@ void AFTPrototypeGameMode::BeginPlay()
     Companion = GetWorld()->SpawnActor<AFTMonsterVisual>(FVector(-100, 80, 0), FRotator::ZeroRotator);
     if (Companion) Companion->Configure(TEXT("mousse"));
 
+    WoundedMousse = GetWorld()->SpawnActor<AFTMonsterVisual>(WoundedPosition(), FRotator::ZeroRotator);
+    if (WoundedMousse) { WoundedMousse->Configure(TEXT("mousse")); WoundedMousse->SetActorScale3D(FVector(0.8)); }
+    for (const auto& Entry : FinalTowerRules::DiscoveryCatalog())
+    {
+        const bool Chest = Entry.Kind == FinalTowerRules::DiscoveryKind::Chest;
+        const FVector Size = Chest ? FVector(0.65, 0.50, 0.40) :
+            (Entry.Kind == FinalTowerRules::DiscoveryKind::Plant ? FVector(0.32, 0.32, 0.48) : FVector(0.65, 0.65, 0.14));
+        DiscoveryMarkers.Add(MakeShape(Chest ? Cube : Sphere, FVector(Entry.X, Entry.Y, Entry.Z), Size));
+    }
+
     // Distant tower is only a visual landmark. The larger setting remains open for design.
     MakeShape(Cylinder, FVector(900, 650, 180), FVector(1.6, 1.6, 4.0));
     MakeShape(Cone, FVector(900, 650, 430), FVector(2.2, 2.2, 1.4));
@@ -321,22 +333,92 @@ void AFTPrototypeGameMode::Tick(float DeltaSeconds)
             Companion->FacePlayer(Player->GetActorLocation());
         }
     }
+    for (int32 Index = 0; Index < DiscoveryMarkers.Num(); ++Index)
+    {
+        AActor* Marker = DiscoveryMarkers[Index];
+        if (!Marker || Index >= FinalTowerRules::DiscoveryCount) continue;
+        const auto& Entry = FinalTowerRules::DiscoveryCatalog()[Index];
+        const bool Collected = State->IsDiscoveryCollected(FName(UTF8_TO_TCHAR(Entry.Key)));
+        Marker->SetActorHiddenInGame(Collected && Entry.Kind == FinalTowerRules::DiscoveryKind::Plant);
+        if (Entry.Kind == FinalTowerRules::DiscoveryKind::Chest)
+        {
+            // Collected chests stay visible as flattened open boxes in this greybox.
+            Marker->SetActorScale3D(FVector(0.65, 0.50, Collected ? 0.12 : 0.40));
+            Marker->SetActorLocation(FVector(Entry.X, Entry.Y, Collected ? 6 : Entry.Z));
+        }
+    }
+    if (WoundedMousse)
+    {
+        WoundedMousse->SetActorHiddenInGame(State->GetWoundedStage() == static_cast<int32>(FinalTowerRules::WoundedStep::Completed));
+        const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+        if (Player)
+        {
+            WoundedMousse->SetActorLocation(State->IsWoundedFollowing() ? Player->GetActorLocation() + FVector(-110, 70, -40) : WoundedPosition());
+            WoundedMousse->FacePlayer(Player->GetActorLocation());
+        }
+    }
     if (LanternMarker)
         LanternMarker->SetActorScale3D(FVector(State->bStoryComplete ? 0.5 : 0.25));
+}
+
+FVector AFTPrototypeGameMode::GetWoundedPosition() const
+{
+    return WoundedMousse ? WoundedMousse->GetActorLocation() : WoundedPosition();
+}
+
+FName AFTPrototypeGameMode::FindInteraction(const FVector& Position) const
+{
+    const UFTAdventureSubsystem* State = Adventure(this);
+    if (!State || State->bInBattle || !State->Dialogue.IsEmpty()) return NAME_None;
+    FName Nearest;
+    float Distance = 145.0f;
+    const auto Consider = [&Nearest, &Distance, &Position](FName Id, const FVector& Target)
+    {
+        const float Candidate = FVector::Dist2D(Position, Target);
+        if (Candidate < Distance) { Distance = Candidate; Nearest = Id; }
+    };
+    Consider(TEXT("keeper"), KeeperPosition());
+    if (IsEncounterAvailable(TEXT("luciolle"))) Consider(TEXT("luciolle"), EncounterPosition());
+    if (IsEncounterAvailable(TEXT("roncinet"))) Consider(TEXT("roncinet"), RoncinetPosition());
+    if (State->GetWoundedStage() != static_cast<int32>(FinalTowerRules::WoundedStep::Completed) && !State->IsWoundedFollowing())
+        Consider(TEXT("wounded_mousse"), GetWoundedPosition());
+    for (const auto& Entry : FinalTowerRules::DiscoveryCatalog())
+    {
+        const FName Id(UTF8_TO_TCHAR(Entry.Key));
+        if (!State->IsDiscoveryCollected(Id)) Consider(Id, FVector(Entry.X, Entry.Y, Entry.Z));
+    }
+    return Nearest;
+}
+
+FString AFTPrototypeGameMode::GetInteractionPrompt(const FVector& Position) const
+{
+    const FName Id = FindInteraction(Position);
+    if (Id == TEXT("keeper")) return TEXT("Parler à la gardienne");
+    if (Id == TEXT("wounded_mousse"))
+    {
+        const UFTAdventureSubsystem* State = Adventure(this);
+        if (State && State->GetWoundedStage() == static_cast<int32>(FinalTowerRules::WoundedStep::Found))
+            return TEXT("Soigner Mousse : 1 baie de braise");
+        if (State && State->GetWoundedStage() == static_cast<int32>(FinalTowerRules::WoundedStep::Healed))
+            return TEXT("Rassurer Mousse : 1 friandise des bois");
+        return TEXT("Approcher la petite Mousse");
+    }
+    if (Id == TEXT("luciolle") || Id == TEXT("roncinet")) return TEXT("Rencontrer la créature");
+    if (const auto* Entry = FinalTowerRules::FindDiscovery(TCHAR_TO_UTF8(*Id.ToString())))
+        return FString::Printf(TEXT("%s : %s"), Entry->Kind == FinalTowerRules::DiscoveryKind::Plant ? TEXT("Récolter") : TEXT("Fouiller"), UTF8_TO_TCHAR(Entry->Name));
+    return TEXT("Explorer les environs ; J : journal");
 }
 
 void AFTPrototypeGameMode::InteractAt(const FVector& Position)
 {
     UFTAdventureSubsystem* State = Adventure(this);
-    if (!State || State->bInBattle) return;
-    if (FVector::Dist2D(Position, KeeperPosition()) < 170)
-        State->TalkToKeeper();
-    else if (IsEncounterAvailable(TEXT("luciolle")) && FVector::Dist2D(Position, EncounterPosition()) < 170)
-        State->BeginEncounter(TEXT("luciolle"));
-    else if (IsEncounterAvailable(TEXT("roncinet")) && FVector::Dist2D(Position, RoncinetPosition()) < 170)
-        State->BeginEncounter(TEXT("roncinet"));
-    else
-        State->Message = TEXT("Approchez de la gardienne, de Luciolle ou de Roncinet, puis touchez Interagir.");
+    if (!State || State->bInBattle || !State->Dialogue.IsEmpty()) return;
+    const FName Id = FindInteraction(Position);
+    if (Id == TEXT("keeper")) State->TalkToKeeper();
+    else if (Id == TEXT("wounded_mousse")) State->TalkToWounded();
+    else if (Id == TEXT("luciolle") || Id == TEXT("roncinet")) State->BeginEncounter(Id);
+    else if (!Id.IsNone()) State->CollectDiscovery(Id);
+    else State->Message = TEXT("Approchez d'un coffre, d'une plante, d'une créature ou de la gardienne. J ouvre le journal.");
 }
 
 bool AFTPrototypeGameMode::IsEncounterAvailable(FName Id) const
@@ -390,15 +472,16 @@ void AFTPrototypeHUD::DrawHUD()
     Scale = FMath::Max(0.1f, static_cast<float>(Canvas->SizeY) / 720.0f);
     ViewWidth = Canvas->SizeX / Scale;
     ViewHeight = 720;
-    if (State->bAwaitingReplacement) { bTeamOpen = true; bInventoryOpen = false; }
+    if (State->bAwaitingReplacement) { bTeamOpen = true; bInventoryOpen = bJournalOpen = false; }
     if (bTeamOpen) { DrawTeam(); return; }
     if (bInventoryOpen) { DrawInventory(); return; }
+    if (bJournalOpen) { DrawJournal(); return; }
     if (bArtBookOpen) { DrawArtBook(); return; }
     const float Margin = 40;
     DrawRect(FLinearColor(0.025f, 0.05f, 0.075f, 0.94f), 0, 0, Canvas->SizeX, 126 * Scale);
-    Label(TEXT("FINAL TOWER — prototype 0.4"), Margin, 20, FLinearColor(1, 0.8, 0.4));
+    Label(TEXT("FINAL TOWER — prototype 0.5"), Margin, 20, FLinearColor(1, 0.8, 0.4));
     Wrapped(State->GetObjective(), Margin, 55, ViewWidth - 2 * Margin);
-    Label(TEXT("Sprites 2D animés • Carnet : personnages, bestiaire et aperçus"), Margin, 96, FLinearColor(0.7, 0.75, 0.8), 0.8f);
+    Label(TEXT("J : journal de quêtes • Carnet : personnages et bestiaire"), Margin, 96, FLinearColor(0.7, 0.75, 0.8), 0.8f);
 
     if (State->Friends.IsValidIndex(State->ActiveFriend))
     {
@@ -425,7 +508,29 @@ void AFTPrototypeHUD::DrawHUD()
             if (PlayerOwner && PlayerOwner->ProjectWorldLocationToScreen(World + FVector(0, 0, 80), Screen))
                 Label(Index == 0 ? TEXT("Gardienne") : (Index == 1 ? TEXT("Luciolle") : TEXT("Roncinet")), Screen.X / Scale, Screen.Y / Scale);
         }
-        Label(TEXT("Glisser pour marcher • clavier : ZQSD / WASD • E : interagir"), Margin, 185, FLinearColor(0.8, 0.85, 0.9), 0.85f);
+        Label(TEXT("Glisser pour marcher • ZQSD / WASD • E : interagir • J : journal"), Margin, 185, FLinearColor(0.8, 0.85, 0.9), 0.85f);
+        const AFTPrototypeGameMode* Mode = Cast<AFTPrototypeGameMode>(UGameplayStatics::GetGameMode(this));
+        const APawn* Player = PlayerOwner ? PlayerOwner->GetPawn() : nullptr;
+        if (Mode && Player)
+        {
+            Label(Mode->GetInteractionPrompt(Player->GetActorLocation()), Margin, 220, FLinearColor(1, 0.85f, 0.5f));
+            for (const auto& Entry : FinalTowerRules::DiscoveryCatalog())
+            {
+                if (State->IsDiscoveryCollected(FName(UTF8_TO_TCHAR(Entry.Key)))) continue;
+                const FVector World(Entry.X, Entry.Y, Entry.Z + 60);
+                FVector2D Screen;
+                if (FVector::Dist2D(Player->GetActorLocation(), World) < 340 &&
+                    PlayerOwner->ProjectWorldLocationToScreen(World, Screen))
+                    Label(UTF8_TO_TCHAR(Entry.Name), Screen.X / Scale, Screen.Y / Scale, FLinearColor(1, 0.85f, 0.5f), 0.8f);
+            }
+            if (State->GetWoundedStage() != static_cast<int32>(FinalTowerRules::WoundedStep::Completed))
+            {
+                const FVector World = Mode->GetWoundedPosition() + FVector(0, 0, 95);
+                FVector2D Screen;
+                if (FVector::Dist2D(Player->GetActorLocation(), World) < 340 && PlayerOwner->ProjectWorldLocationToScreen(World, Screen))
+                    Label(State->IsWoundedFollowing() ? TEXT("Mousse vous suit") : TEXT("Petite Mousse"), Screen.X / Scale, Screen.Y / Scale, FLinearColor(0.8f, 1, 0.7f), 0.8f);
+            }
+        }
     }
 
     const float PanelY = 440;
@@ -465,12 +570,13 @@ void AFTPrototypeHUD::DrawHUD()
     else
     {
         Wrapped(State->Message, Margin, PanelY + 24, ViewWidth - 2 * Margin);
-        const float Width = FMath::Min(200.0f, (ViewWidth - 144) / 5);
+        const float Width = FMath::Min(185.0f, (ViewWidth - 160) / 6);
         Button(TEXT("companion"), TEXT("Équipe"), Margin, 625, Width);
         Button(TEXT("inventory"), TEXT("Sac · I"), Margin + Width + 16, 625, Width);
         Button(TEXT("save"), TEXT("Sauver"), Margin + 2 * (Width + 16), 625, Width);
         Button(TEXT("artbook"), TEXT("Carnet"), Margin + 3 * (Width + 16), 625, Width);
-        Button(TEXT("interact"), TEXT("Interagir"), Margin + 4 * (Width + 16), 625, Width);
+        Button(TEXT("journal"), TEXT("Journal"), Margin + 4 * (Width + 16), 625, Width);
+        Button(TEXT("interact"), TEXT("Interagir"), Margin + 5 * (Width + 16), 625, Width);
     }
     if (const AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner))
     {
@@ -509,6 +615,10 @@ void AFTPrototypeHUD::Act(FName Action)
     {
         if (AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner)) Control->BattleAction(Action);
     }
+    else if (Action == TEXT("journal")) ToggleJournal();
+    else if (Action == TEXT("closejournal")) bJournalOpen = false;
+    else if (Action == TEXT("quest_0")) JournalQuest = 0;
+    else if (Action == TEXT("quest_1")) JournalQuest = 1;
     else if (Action == TEXT("inventory")) ToggleInventory();
     else if (Action == TEXT("closebag")) bInventoryOpen = false;
     else if (Action == TEXT("bagback")) { SelectedItem = -1; InventoryPage = 0; }
@@ -547,7 +657,7 @@ void AFTPrototypeHUD::Act(FName Action)
     else if (Action.ToString().StartsWith(TEXT("toggle_")))
         State->TogglePartyMember(FCString::Atoi(*Action.ToString().RightChop(7)));
     else if (Action == TEXT("save"))
-        State->Message = State->SaveProgress() ? TEXT("Compagnons, inventaire et histoire sauvegardés.") : TEXT("Sauvegarde impossible. Réessayez.");
+        State->Message = State->SaveProgress() ? TEXT("Compagnons, sac, découvertes et quêtes sauvegardés.") : TEXT("Sauvegarde impossible. Réessayez.");
     else if (Action == TEXT("artbook")) { bArtBookOpen = true; ArtPage = 0; }
     else if (Action == TEXT("closebook")) bArtBookOpen = false;
     else if (Action == TEXT("nextpage")) ArtPage = (ArtPage + 1) % 5;
@@ -569,7 +679,44 @@ void AFTPrototypeHUD::ToggleInventory()
     const UFTAdventureSubsystem* State = Adventure(this);
     if (!State || !State->Dialogue.IsEmpty() || State->bAwaitingReplacement) return;
     bInventoryOpen = !bInventoryOpen;
-    if (bInventoryOpen) { bTeamOpen = false; bArtBookOpen = false; SelectedItem = -1; InventoryPage = 0; }
+    if (bInventoryOpen) { bTeamOpen = bJournalOpen = false; bArtBookOpen = false; SelectedItem = -1; InventoryPage = 0; }
+}
+
+void AFTPrototypeHUD::ToggleJournal()
+{
+    const UFTAdventureSubsystem* State = Adventure(this);
+    if (!State || !State->Dialogue.IsEmpty() || State->bAwaitingReplacement) return;
+    bJournalOpen = !bJournalOpen;
+    if (bJournalOpen)
+    {
+        bTeamOpen = bInventoryOpen = bArtBookOpen = false;
+        JournalQuest = State->GetWoundedStage() > 0 && State->GetWoundedStage() < 4 ? 1 : 0;
+    }
+}
+
+void AFTPrototypeHUD::DrawJournal()
+{
+    const UFTAdventureSubsystem* State = Adventure(this);
+    if (!State) return;
+    const auto Quests = State->GetQuests();
+    if (Quests.IsEmpty()) return;
+    JournalQuest = FMath::Clamp(JournalQuest, 0, Quests.Num() - 1);
+    const auto& Quest = Quests[JournalQuest];
+    DrawRect(FLinearColor(0.025f, 0.035f, 0.05f, 1), 0, 0, Canvas->SizeX, Canvas->SizeY);
+    Label(TEXT("JOURNAL — les histoires du village"), 40, 20, FLinearColor(1, 0.8f, 0.4f));
+    Label(FString::Printf(TEXT("Découvertes : %d/%d · 2 coffres, 2 plantes et un nid"), State->GetDiscoveryCount(), FinalTowerRules::DiscoveryCount), 40, 62);
+    const float Width = FMath::Min(380.0f, (ViewWidth - 96) / 2);
+    Button(TEXT("quest_0"), TEXT("La lanterne"), 40, 105, Width);
+    Button(TEXT("quest_1"), TEXT("Sous les branches"), 56 + Width, 105, Width);
+    Label(Quest.Title, 40, 188, FLinearColor(1, 0.85f, 0.5f));
+    Label(Quest.Status, 40, 224, Quest.bComplete ? FLinearColor(0.7f, 1, 0.7f) : FLinearColor::White);
+    Label(TEXT("Objectif"), 40, 272, FLinearColor(0.75f, 0.85f, 1));
+    Wrapped(Quest.Objective, 40, 305, ViewWidth - 80);
+    Label(TEXT("Indices"), 40, 390, FLinearColor(0.75f, 0.85f, 1));
+    Wrapped(Quest.Clues, 40, 423, ViewWidth - 80);
+    Label(TEXT("Récompense"), 40, 505, FLinearColor(0.75f, 0.85f, 1));
+    Wrapped(Quest.Reward, 40, 538, ViewWidth - 80);
+    Button(TEXT("closejournal"), TEXT("Fermer · J"), ViewWidth - 210, 642, 170);
 }
 
 void AFTPrototypeHUD::DrawInventory()

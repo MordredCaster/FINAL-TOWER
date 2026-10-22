@@ -45,7 +45,7 @@ void UFTAdventureSubsystem::Initialize(FSubsystemCollectionBase& Collection)
         Bag = StarterInventory();
         Message = TEXT("Mousse vous accompagne. Une gardienne attend près de la lanterne.");
     }
-    // Persist the starter pack/migration once; reloading never refills a V3 bag.
+    // Persist migrations once; loading never refills an existing inventory or discovery.
     if ((bLoaded || !bHadSave) && !SaveProgress()) Message += TEXT(" Sauvegarde impossible : réessayez avec Sauver.");
 }
 
@@ -321,12 +321,137 @@ void UFTAdventureSubsystem::HealFriends()
     }
 }
 
+bool UFTAdventureSubsystem::IsDiscoveryCollected(FName Id) const
+{
+    const Discovery* Entry = FindDiscovery(TCHAR_TO_UTF8(*Id.ToString()));
+    return Entry && WorldProgress.IsCollected(Entry->Id);
+}
+
+int32 UFTAdventureSubsystem::GetDiscoveryCount() const { return WorldProgress.DiscoveredCount(); }
+int32 UFTAdventureSubsystem::GetWoundedStage() const { return static_cast<int32>(WorldProgress.Wounded); }
+bool UFTAdventureSubsystem::IsWoundedFollowing() const { return WorldProgress.ReadyToReturn(); }
+
+bool UFTAdventureSubsystem::CollectDiscovery(FName Id)
+{
+    if (bInBattle || !Dialogue.IsEmpty()) return false;
+    const Discovery* Entry = FindDiscovery(TCHAR_TO_UTF8(*Id.ToString()));
+    if (!Entry) return false;
+    const CollectResult Result = FinalTowerRules::CollectDiscovery(WorldProgress, Bag, Entry->Id);
+    if (Result == CollectResult::AlreadyCollected) { Message = TEXT("Cette découverte a déjà été récupérée."); return false; }
+    if (Result == CollectResult::BagFull)
+    {
+        Message = TEXT("Une pile du sac est trop pleine. Utilisez des objets puis revenez : tout reste sur place.");
+        return false;
+    }
+    if (Result != CollectResult::Collected) return false;
+    if (Entry->Kind == DiscoveryKind::Clue)
+        Message = TEXT("Dans le nid : un ruban et un petit bateau gravé « Lina ». L'indice est inscrit au journal.");
+    else
+    {
+        Message = FString::Printf(TEXT("%s :"), UTF8_TO_TCHAR(Entry->Name));
+        const Inventory Loot = DiscoveryLoot(*Entry);
+        for (const Item& Object : ItemCatalog())
+            if (Loot.Quantity(Object.Id) > 0)
+                Message += FString::Printf(TEXT(" +%d %s."), Loot.Quantity(Object.Id), UTF8_TO_TCHAR(Object.Name));
+    }
+    if (WorldProgress.ReadyToReturn()) Message += TEXT(" Mousse vous suit. Retournez voir la gardienne.");
+    if (!SaveProgress()) Message += TEXT(" Sauvegarde impossible : réessayez avec Sauver.");
+    return true;
+}
+
+void UFTAdventureSubsystem::TalkToWounded()
+{
+    if (bInBattle || !Dialogue.IsEmpty() || WorldProgress.Wounded == WoundedStep::Completed) return;
+    const WoundedStep Before = WorldProgress.Wounded;
+    if (Before == WoundedStep::Found && Bag.Quantity(ItemId::Berry) == 0)
+    {
+        Message = TEXT("Il faut une baie de braise. Cherchez le buisson plus au nord ou le coffre à l'est de la maison.");
+        return;
+    }
+    if (Before == WoundedStep::Healed && Bag.Quantity(ItemId::Treat) == 0)
+    {
+        Message = TEXT("Il faut une friandise des bois. Fouillez les coffres ou gagnez un combat contre Roncinet.");
+        return;
+    }
+    FinalTowerRules::HelpWounded(WorldProgress, Bag);
+    DialogueLines.Reset();
+    bKeeperDialogue = bFinishStoryAfterDialogue = bFinishWoundedAfterDialogue = false;
+    if (Before == WoundedStep::Hidden)
+    {
+        DialogueLines.Add(TEXT("Une petite Mousse tremble sous un arbre. Sa patte est blessée ; un fil de ruban pend à sa feuille."));
+        DialogueLines.Add(TEXT("Elle recule lorsque vous regardez vers le village. Une baie de braise pourrait soigner sa patte."));
+    }
+    else if (Before == WoundedStep::Found)
+    {
+        DialogueLines.Add(TEXT("Vous écrasez une baie de braise et l'appliquez sur la patte. Mousse cesse de trembler. Une baie a été utilisée."));
+        DialogueLines.Add(TEXT("Elle pourrait marcher, mais refuse toujours de partir. Peut-être qu'une friandise l'aiderait à vous faire confiance."));
+    }
+    else if (Before == WoundedStep::Healed)
+    {
+        DialogueLines.Add(TEXT("Vous tendez une friandise des bois. Mousse vient manger au creux de votre gant. Une friandise a été utilisée."));
+        DialogueLines.Add(WorldProgress.ReadyToReturn() ?
+            TEXT("Elle reconnaît le ruban du nid que vous avez trouvé. Cette fois, elle accepte de vous suivre jusqu'à la gardienne.") :
+            TEXT("Elle tire doucement votre manche vers le nord-ouest, puis revient sous son arbre. Quelque chose l'attend dans un nid sous les branches."));
+    }
+    else
+    {
+        DialogueLines.Add(WorldProgress.ReadyToReturn() ?
+            TEXT("Mousse vous suit sans crainte. Le nom gravé sur le bateau dira peut-être quelque chose à la gardienne.") :
+            TEXT("Mousse regarde vers le nid, au nord-ouest. Cherchez ce qu'elle protège sous les branches."));
+    }
+    DialogueIndex = 0;
+    Dialogue = DialogueLines[0];
+}
+
+TArray<FFTQuestEntry> UFTAdventureSubsystem::GetQuests() const
+{
+    TArray<FFTQuestEntry> Result;
+    FFTQuestEntry Lantern;
+    Lantern.Id = TEXT("keepers_lantern"); Lantern.Title = TEXT("La lanterne du passeur");
+    Lantern.bComplete = bStoryComplete;
+    Lantern.Status = bStoryComplete ? TEXT("Terminée") : (bHeardKeeper || HasFriend(TEXT("luciolle")) ? TEXT("En cours") : TEXT("À découvrir"));
+    Lantern.Objective = GetLanternObjective();
+    Lantern.Clues = HasFriend(TEXT("luciolle")) ? TEXT("Luciolle fredonne la mélodie de la fille de la gardienne.") :
+        (bHeardKeeper ? TEXT("Une lumière chantait près des roseaux, au nord-est du village.") : TEXT("Une gardienne veille près d'une lanterne éteinte."));
+    Lantern.Reward = TEXT("Rendre sa lumière à la lanterne et découvrir le souvenir de la gardienne.");
+    Result.Add(Lantern);
+    FFTQuestEntry Wounded;
+    Wounded.Id = TEXT("wounded_mousse"); Wounded.Title = TEXT("Celui qui attend sous les branches");
+    Wounded.bComplete = WorldProgress.Wounded == WoundedStep::Completed;
+    Wounded.Status = Wounded.bComplete ? TEXT("Terminée") : (WorldProgress.Wounded == WoundedStep::Hidden ? TEXT("À découvrir") :
+        (WorldProgress.ReadyToReturn() ? TEXT("Retour à la gardienne") : TEXT("En cours")));
+    Wounded.Objective = UTF8_TO_TCHAR(WoundedObjective(WorldProgress));
+    Wounded.Clues = WorldProgress.IsCollected(DiscoveryId::OldNest) ?
+        TEXT("Dans le nid, un ruban usé et un bateau de bois portent le nom « Lina ». Mousse les gardait à l'abri.") :
+        (WorldProgress.Wounded == WoundedStep::Hidden ? TEXT("Des feuilles bougent à l'ouest du village.") :
+            TEXT("Une patte blessée, un fil de ruban et une créature qui refuse d'abandonner les arbres."));
+    Wounded.Reward = TEXT("Mousse niveau 2 rejoint la collection ; 2 rosées de lune. Récompense unique.");
+    Result.Add(Wounded);
+    return Result;
+}
+
 void UFTAdventureSubsystem::TalkToKeeper()
 {
     if (bInBattle || !Dialogue.IsEmpty()) return;
     HealFriends();
     DialogueLines.Reset();
-    bFinishStoryAfterDialogue = false;
+    bFinishStoryAfterDialogue = bFinishWoundedAfterDialogue = false;
+    bKeeperDialogue = true;
+    if (WorldProgress.ReadyToReturn())
+    {
+        if (Friends.Num() >= 1000 || !FitsLoot(Bag, WoundedReward()))
+        {
+            Message = TEXT("Mousse reste avec vous. Pour recevoir sa récompense, gardez deux places dans la pile de rosées et une place dans la collection.");
+            return;
+        }
+        bKeeperDialogue = false;
+        bFinishWoundedAfterDialogue = true;
+        DialogueLines.Add(TEXT("Gardienne : Ce bateau... Lina l'avait fabriqué pour une petite Mousse. Elle lui promettait de revenir chaque printemps."));
+        DialogueLines.Add(TEXT("Gardienne : Tu gardais encore ses affaires au sec ? Oh, petite... tu n'as plus besoin d'attendre toute seule."));
+        DialogueLines.Add(TEXT("La gardienne attache le ruban à votre gant. Mousse s'y blottit. Certains souvenirs peuvent voyager avec nous."));
+        DialogueIndex = 0; Dialogue = DialogueLines[0];
+        return;
+    }
     if (bStoryComplete)
     {
         DialogueLines.Add(TEXT("Gardienne : La lanterne brille à nouveau. Prenez soin de votre petite amie."));
@@ -362,15 +487,35 @@ void UFTAdventureSubsystem::AdvanceDialogue()
         return;
     }
     Dialogue.Empty();
-    bHeardKeeper = true;
-    if (bFinishStoryAfterDialogue) bStoryComplete = true;
-    bFinishStoryAfterDialogue = false;
-    Message = bStoryComplete ? TEXT("Histoire terminée : La lanterne du passeur. Votre aventure ne fait que commencer.")
-                            : TEXT("Cherchez la lumière près des roseaux et tendez-lui la main.");
+    if (bKeeperDialogue)
+    {
+        bHeardKeeper = true;
+        if (bFinishStoryAfterDialogue) bStoryComplete = true;
+    }
+    if (bFinishWoundedAfterDialogue)
+    {
+        if (ClaimWoundedReward(WorldProgress, Bag, Friends.Num()))
+        {
+            AddFriend(TEXT("mousse"), 2);
+            Message = TEXT("Histoire terminée : Celui qui attend sous les branches. Mousse niv. 2 vous rejoint ; +2 rosées de lune.");
+        }
+        else Message = TEXT("La récompense attend chez la gardienne. Libérez de la place et reparlez-lui.");
+    }
+    else Message = GetObjective();
+    bFinishStoryAfterDialogue = bFinishWoundedAfterDialogue = bKeeperDialogue = false;
     if (!SaveProgress()) Message += TEXT(" Sauvegarde impossible : réessayez avec Sauver.");
 }
 
 FString UFTAdventureSubsystem::GetObjective() const
+{
+    if (WorldProgress.Wounded != WoundedStep::Hidden && WorldProgress.Wounded != WoundedStep::Completed)
+        return UTF8_TO_TCHAR(WoundedObjective(WorldProgress));
+    if (bStoryComplete && WorldProgress.Wounded == WoundedStep::Completed)
+        return FString::Printf(TEXT("Explorer les environs — %d/%d découvertes"), GetDiscoveryCount(), DiscoveryCount);
+    return GetLanternObjective();
+}
+
+FString UFTAdventureSubsystem::GetLanternObjective() const
 {
     if (bStoryComplete) return TEXT("La lanterne du passeur — histoire terminée");
     if (HasFriend(TEXT("luciolle"))) return TEXT("Retourner voir la gardienne avec Luciolle");
@@ -443,7 +588,10 @@ bool UFTAdventureSubsystem::SaveProgress()
     if (bInBattle || !Dialogue.IsEmpty()) return false;
     UFTAdventureSave* Save = Cast<UFTAdventureSave>(UGameplayStatics::CreateSaveGameObject(UFTAdventureSave::StaticClass()));
     if (!Save) return false;
-    Save->Version = 3;
+    Save->Version = 4;
+    Save->WoundedStage = static_cast<int32>(WorldProgress.Wounded);
+    for (const Discovery& Entry : DiscoveryCatalog())
+        if (WorldProgress.IsCollected(Entry.Id)) Save->CollectedDiscoveries.Add(FName(UTF8_TO_TCHAR(Entry.Key)));
     for (const Item& Entry : ItemCatalog())
         Save->Items.Add(FName(UTF8_TO_TCHAR(Entry.Key)), Bag.Quantity(Entry.Id));
     Save->Friends = Friends; Save->Party = Party;
@@ -456,7 +604,7 @@ bool UFTAdventureSubsystem::LoadProgress()
 {
     if (bInBattle || !Dialogue.IsEmpty() || !UGameplayStatics::DoesSaveGameExist(SaveSlot, 0)) return false;
     const UFTAdventureSave* Save = Cast<UFTAdventureSave>(UGameplayStatics::LoadGameFromSlot(SaveSlot, 0));
-    if (!Save || (Save->Version < 1 || Save->Version > 3) || Save->Friends.IsEmpty() || Save->Friends.Num() > 1000) return false;
+    if (!Save || (Save->Version < 1 || Save->Version > 4) || Save->Friends.IsEmpty() || Save->Friends.Num() > 1000) return false;
     TSet<FGuid> Seen;
     for (const FFTMonsterFriend& Friend : Save->Friends)
     {
@@ -480,6 +628,14 @@ bool UFTAdventureSubsystem::LoadProgress()
         const int32* Count = Save->Items.Find(FName(UTF8_TO_TCHAR(Entry.Key)));
         if (Count) SavedBag.Add(Entry.Id, *Count);
     }
+    Exploration SavedWorld;
+    if (Save->Version >= 4)
+    {
+        SavedWorld.Wounded = static_cast<WoundedStep>(Save->WoundedStage);
+        for (const Discovery& Entry : DiscoveryCatalog())
+            SavedWorld.Collected[static_cast<int>(Entry.Id)] = Save->CollectedDiscoveries.Contains(FName(UTF8_TO_TCHAR(Entry.Key)));
+    }
+    WorldProgress = RestoreExploration(Save->Version, SavedWorld);
     Bag = RestoreInventory(Save->Version, SavedBag);
     Friends = MoveTemp(Validated);
     Party.Reset(); for (int32 Index : Normalized) Party.Add(Index);
@@ -492,7 +648,7 @@ bool UFTAdventureSubsystem::LoadProgress()
     bHeardKeeper = Save->bHeardKeeper;
     bStoryComplete = Save->bStoryComplete && HasFriend(TEXT("luciolle"));
     Message = Save->Version == 1 ? TEXT("Ancienne sauvegarde retrouvée : équipe et PM initialisés, compagnons conservés.") :
-        TEXT("Aventure retrouvée : compagnons, équipe et inventaire restaurés.");
+        TEXT("Aventure retrouvée : compagnons, sac, découvertes et journal restaurés.");
     if (Save->Version < 3) Message += TEXT(" Sac de départ reçu : 3 baies, 2 rosées et 2 friandises.");
     return true;
 }

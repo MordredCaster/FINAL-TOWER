@@ -1,4 +1,4 @@
-# Objets et inventaire — prototype 0.4
+# Objets et inventaire — prototype 0.5
 
 Le sac est partagé par toute la collection. Le bouton **Sac** et la touche **I** l’ouvrent et le ferment, en exploration comme en combat. Trois piles de 99 objets au maximum sont prévues ; les entrées restent visibles à zéro. Le menu bloque les déplacements et les actions de combat au clavier. L’interface est le HUD Canvas natif du prototype, à vérifier dans Unreal et sur téléphone.
 
@@ -32,15 +32,17 @@ Le sac de départ accompagne une nouvelle partie. Les anciennes sauvegardes le r
 | Luciolle | 1 rosée de lune |
 | Mousse | 1 baie de braise, si une rencontre de cette espèce est lancée par Blueprint |
 
-La scène actuelle propose Roncinet et Luciolle, qui réapparaissent après 12 secondes. Recrutements, fuites et défaites ne donnent aucun objet. Les récompenses sont accordées lors de la résolution de la rencontre, une seule fois. Une pile pleine reste à 99 ; le message précise les objets non ajoutés. Il n’y a pas encore de boutique, équipement, coffre, récolte, fabrication ou objet de résurrection.
+La scène actuelle propose Roncinet et Luciolle, qui réapparaissent après 12 secondes. Recrutements, fuites et défaites ne donnent aucun objet. Les récompenses sont accordées lors de la résolution de la rencontre, une seule fois. Une pile pleine reste à 99 ; le message précise les objets non ajoutés. Les coffres et les plantes de la zone fournissent aussi des objets, une fois chacun ; voir [EXPLORATION.md](EXPLORATION.md). Il n’y a pas encore de boutique, équipement, fabrication ou objet de résurrection.
+
+Deux actions de quête utilisent le sac : soigner la Mousse blessée coûte une baie, puis la rassurer coûte une friandise. Le coût apparaît dans l’invite d’interaction et les objets sont déduits une seule fois par étape. Ce soin narratif concerne une créature du monde, pas un compagnon de la collection.
 
 ## Sauvegarde
 
-Le slot reste `FinalTower_Prototype_v1`. Le schéma interne passe à **3** et ajoute une table d’identifiants stables et de quantités. Les noms affichés ne servent pas de clés. Au chargement, seules les clés du catalogue sont lues, les quantités sont bornées entre 0 et 99, et une entrée absente vaut zéro.
+Le slot reste `FinalTower_Prototype_v1`. Le schéma interne actuel est **4** ; la version 3 a ajouté une table d’identifiants stables et de quantités. Les noms affichés ne servent pas de clés. Au chargement, seules les clés du catalogue sont lues, les quantités sont bornées entre 0 et 99, et une entrée absente vaut zéro.
 
 - Version 1 : migration existante des compagnons et de l’équipe, plus sac de départ.
 - Version 2 : XP, PM, équipe et réserve conservés, plus sac de départ.
-- Version 3 : quantités restaurées telles quelles, y compris un sac vide ; aucun réapprovisionnement au chargement.
+- Versions 3 et 4 : quantités restaurées telles quelles, y compris un sac vide ; aucun réapprovisionnement au chargement. La version 4 ajoute les découvertes et les étapes de la quête, sans modifier les piles.
 
 Le démarrage enregistre le nouveau schéma après une migration réussie. Chaque soin hors combat sauvegarde immédiatement. Les objets utilisés pendant une rencontre sont enregistrés avec les PV/PM et le résultat à la fin du combat, comme les autres actions ; le combat en cours ne peut pas être sauvegardé. En cas de fermeture avant sa résolution, on reprend l’état sauvegardé précédent. Un échec d’écriture est annoncé et le bouton **Sauver** permet de réessayer après le combat ou le dialogue.
 

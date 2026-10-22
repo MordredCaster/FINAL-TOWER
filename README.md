@@ -4,7 +4,7 @@ Un RPG mobile d'aventure : **explorer, se lier d'amitié avec des monstres et vi
 
 Projet natif **Unreal Engine 5.8**, paysage, solo hors ligne. Direction visée : personnages 2D en pixel art dans des décors 3D simples, avec une caméra fixe et une lumière soignée. Dragon Quest V inspire le sentiment d'aventure ; Octopath Traveler et Tactics Ogre: Reborn sont des références visuelles, avec des personnages et un univers originaux.
 
-## État du projet — 0.4
+## État du projet — 0.5
 
 Socle de code et scène de test 3D générée au lancement, maintenant reliés aux sprites du héros et des trois monstres. **Les 15 images sources et 10 atlas sont inclus ; les assets Paper2D sont construits automatiquement au premier lancement de l'éditeur.** Les décors restent géométriques. La compilation Unreal et le rendu sur appareil n'ont pas encore été validés ; aucun APK n'est fourni.
 
@@ -20,7 +20,9 @@ Fonctionnalités implémentées dans le code :
 - PV/PM conservés ; sauvegardes du premier prototype migrées sans supprimer la collection.
 - Recrutement favorisé par l'affaiblissement ; une tentative ratée provoque une riposte.
 - Collection persistante et changement du compagnon actif hors combat.
-- Courte quête originale : **La lanterne du passeur**.
+- Deux histoires originales : **La lanterne du passeur** et **Celui qui attend sous les branches**, avec une Mousse à soigner et à rassurer.
+- Exploration : deux coffres, deux plantes récoltables et un nid contenant un indice ; découvertes persistantes.
+- Journal des quêtes avec objectifs, indices, état des histoires et récompenses uniques ; touche J ou bouton Journal.
 - Sauvegarde locale des compagnons, de leurs PV, du compagnon actif et de la progression narrative.
 - Sprites Paper2D du héros : repos/marche selon le déplacement et direction relative à la caméra.
 - Geste de combat à l'attaque, geste magique au recrutement ; aperçus des sept animations du héros.
@@ -28,7 +30,7 @@ Fonctionnalités implémentées dans le code :
 - Carnet en jeu avec cinq planches de chara design, dont le frère en tenue élégante.
 - Module Editor d'import reproductible : 160 sprites, 40 flipbooks, 15 textures.
 
-**Validation :** les règles de combat/recrutement, la progression/les techniques/les relais, les objets/le butin/la migration d’inventaire, les directions de sprites et les atlas ont des tests autonomes. Unreal Editor/UnrealBuildTool ne sont pas présents dans l'environnement de création : la compilation du module, l'ouverture de la scène et l'export Android/iOS restent à valider sur une machine équipée. Une réussite de la CI des règles ne prouve pas que le projet Unreal compile.
+**Validation :** les règles de combat/recrutement, la progression/les techniques/les relais, les objets/le butin, les découvertes/la quête/la migration des sauvegardes, les directions de sprites et les atlas ont des tests autonomes. Unreal Editor/UnrealBuildTool ne sont pas présents dans l'environnement de création : la compilation du module, l'ouverture de la scène et l'export Android/iOS restent à valider sur une machine équipée. Une réussite de la CI des règles ne prouve pas que le projet Unreal compile.
 
 ## Premier lancement
 
@@ -37,13 +39,15 @@ Fonctionnalités implémentées dans le code :
 3. Ouvrir `FinalTower.uproject` et accepter la génération/compilation des modules ; ou générer les fichiers de projet puis compiler la cible `FinalTowerEditor` en Development Editor.
 4. Attendre la fin de l'import automatique des images (`FINAL TOWER art ready` dans le journal), puis lancer **Play**. La carte de démarrage `/Engine/Maps/Entry` reçoit le mode de jeu natif, qui construit la scène de test.
 
-Voir [le guide de démarrage](Docs/DEMARRAGE.md) pour les contrôles et [le guide des images](Docs/ART.md) pour l'import automatique, le Carnet et la cuisson mobile. Les [règles de progression](Docs/PROGRESSION.md) détaillent les techniques et l’équipe ; le [guide de l’inventaire](Docs/INVENTAIRE.md) explique les objets, le butin et les sauvegardes.
+Voir [le guide de démarrage](Docs/DEMARRAGE.md) pour les contrôles et [le guide des images](Docs/ART.md) pour l'import automatique, le Carnet et la cuisson mobile. Les [règles de progression](Docs/PROGRESSION.md) détaillent les techniques et l’équipe ; le [guide de l’inventaire](Docs/INVENTAIRE.md) explique les objets et le butin. Le [guide d’exploration](Docs/EXPLORATION.md) décrit les découvertes, la nouvelle quête et le journal.
 
 ## Essayer la boucle
 
 Approcher la **Gardienne**, puis choisir **Interagir**. Lire ses trois répliques. Rejoindre la **Lumière des roseaux**, interagir et attaquer avec modération : un monstre vaincu ne peut pas être recruté durant ce combat. Choisir **Tendre la main**, puis retourner auprès de la gardienne une fois Luciolle recrutée.
 
 **Sac** ou **I** ouvre l’inventaire. Le départ donne 3 baies (+25 PV), 2 rosées (+8 PM) et 2 friandises (+20 points de recrutement). Hors combat, choisir un soin puis un compagnon ; en combat, les soins ciblent l’actif et tout objet utilisé provoque une riposte. Une victoire sur Roncinet rapporte une baie et une friandise, sur Luciolle une rosée.
+
+**Journal** ou **J** affiche les deux histoires. À l’ouest du village, une petite Mousse blessée attend sous un arbre : approcher et interagir pour la rencontrer, lui apporter une baie, puis une friandise. Fouiller le nid au nord-ouest et retourner voir la gardienne ; Mousse vous suit lorsque vous avez gagné sa confiance et trouvé l’indice. Deux coffres et deux plantes fournissent des objets dans les environs.
 
 Après victoire ou recrutement, les rencontres d'essai réapparaissent au bout de 12 secondes. Une défaite soigne l'équipe ; reculer conserve les PV et PM restants. La gardienne repose les compagnons. La position du héros n'est pas sauvegardée : on reprend au centre de la zone.
 
@@ -55,6 +59,7 @@ Après victoire ou recrutement, les rencontres d'essai réapparaissent au bout d
 | `Config/` | Mobile, rendu, carte de démarrage et contrôles |
 | `Source/FinalTower/Public/FTBattleRules.h` | Règles de combat indépendantes du moteur |
 | `Source/FinalTower/Public/FTInventoryRules.h` | Catalogue des objets, piles, soins, butin et migration du sac |
+| `Source/FinalTower/Public/FTExplorationRules.h` | Découvertes, étapes de la quête et récompenses uniques |
 | `Source/FinalTower/*/FTAdventureSubsystem.*` | Collection, rencontres, dialogue, sauvegarde |
 | `Source/FinalTower/*/FTPrototype.*` | Héros, contrôles tactiles, caméra, HUD et scène de test |
 | `Docs/` | Vision, décisions provisoires et démarrage |

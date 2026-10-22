@@ -30,6 +30,7 @@ La scène géométrique est construite par `AFTPrototypeGameMode::BeginPlay` dan
 | Quitter le combat | Bouton Reculer | 3 |
 | Équipe et réserve / relais en combat | Bouton Équipe | Tab |
 | Inventaire | Bouton Sac, puis objet / cible | I ouvre et ferme le sac |
+| Journal des quêtes | Bouton Journal | J ouvre et ferme le journal |
 | Techniques en combat | Trois boutons de techniques | 4 / 5 / 6 |
 | Sauvegarder | Bouton Sauver, hors dialogue/combat | — |
 
@@ -87,3 +88,21 @@ Le bouton **Sac** ou la touche **I** ouvre et ferme le sac. Les baies rendent 25
 8. Finir un combat avec un sac modifié, fermer complètement puis relancer : ressources et objets doivent correspondre au même état sauvegardé. Un combat en cours n’est pas un point de sauvegarde.
 
 Les règles de quantités, d’effets, de tours et de migration ont des tests C++ autonomes ; la sérialisation Unreal et l’interface restent à vérifier dans le moteur. Détails : [INVENTAIRE.md](INVENTAIRE.md).
+
+## Exploration et journal (0.5)
+
+Les nouveaux coffres, plantes et nid sont des formes géométriques dans la zone de test. La Mousse de quête réutilise son sprite idle ; une animation spécifique de blessure reste à créer. Le journal s’ouvre avec **J** ou **Journal** et montre les deux histoires, leurs indices et leurs récompenses. Les menus bloquent les déplacements.
+
+Parcours supplémentaire à vérifier dans Unreal :
+
+1. Ouvrir le coffre à l’est de la maison et récolter le buisson à l’ouest. Vérifier les quantités, puis sauvegarder et relancer : le coffre reste ouvert, la plante disparaît et les objets ne sont pas redonnés.
+2. À l’ouest, rencontrer la petite Mousse. Terminer chaque dialogue. Réinteragir pour utiliser une baie, puis une friandise ; les invites affichent les coûts et le sac doit perdre exactement une unité de chaque objet.
+3. Chercher le nid au nord-ouest et lire le journal. Mousse doit maintenant suivre le héros. Le nid peut aussi être fouillé avant la première rencontre sans bloquer la quête.
+4. Retourner voir la gardienne et terminer ses trois répliques : une Mousse niveau 2 rejoint la collection et deux rosées de lune sont ajoutées. Une équipe déjà complète envoie le nouveau compagnon en réserve.
+5. Relancer le jeu, puis reparler à la gardienne : aucun nouveau compagnon ni objet de quête ne doit apparaître. La quête de la lanterne reste accessible indépendamment de celle de Mousse.
+6. Essayer chaque étape sans l’objet demandé, puis revenir après récolte ou victoire. Vérifier qu’aucune étape n’avance sans consommer son objet.
+7. Essayer un coffre avec une pile presque pleine : aucun butin partiel ni changement de découverte. Libérer assez de place et revenir. Même contrôle pour les deux rosées de récompense finale.
+8. Charger une sauvegarde V3 : compagnons et quantités inchangés, découvertes et quête de Mousse disponibles. Reprendre après une sauvegarde à chacune des étapes de la quête.
+9. Avec deux cibles à portée, vérifier que l’invite et l’action concernent la cible la plus proche ; vérifier les six boutons en paysage tactile, J et I, et la lecture complète des dialogues.
+
+Ces scénarios dans le moteur restent à exécuter. Les règles indépendantes d’Unreal sont testées automatiquement. Voir [EXPLORATION.md](EXPLORATION.md) pour les emplacements et les sauvegardes.
