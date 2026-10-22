@@ -93,8 +93,9 @@ class FINALTOWER_API AFTPrototypeHUD : public AHUD
 public:
     virtual void DrawHUD() override;
     bool HandleTap(FVector2D Position);
-    bool IsMenuOpen() const { return bArtBookOpen || bTeamOpen; }
-    void OpenTeam() { bTeamOpen = true; TeamPage = 0; }
+    bool IsMenuOpen() const { return bArtBookOpen || bTeamOpen || bInventoryOpen; }
+    void OpenTeam() { bTeamOpen = true; bInventoryOpen = false; TeamPage = 0; }
+    void ToggleInventory();
 
 private:
     struct FButton
@@ -109,6 +110,9 @@ private:
     int32 ArtPage = 0;
     bool bTeamOpen = false;
     int32 TeamPage = 0;
+    bool bInventoryOpen = false;
+    int32 SelectedItem = -1;
+    int32 InventoryPage = 0;
     float Scale = 1.0f;
     float ViewWidth = 1280.0f;
     float ViewHeight = 720.0f;
@@ -118,4 +122,5 @@ private:
     void Act(FName Action);
     void DrawArtBook();
     void DrawTeam();
+    void DrawInventory();
 };

@@ -37,11 +37,16 @@ void UFTAdventureSubsystem::Initialize(FSubsystemCollectionBase& Collection)
         MakeSpecies(TEXT("luciolle"), TEXT("Luciolle"), TEXT("Magie lumineuse")),
         MakeSpecies(TEXT("roncinet"), TEXT("Roncinet"), TEXT("Charge et protection"))
     };
-    if (!LoadProgress())
+    const bool bHadSave = UGameplayStatics::DoesSaveGameExist(SaveSlot, 0);
+    const bool bLoaded = LoadProgress();
+    if (!bLoaded)
     {
         AddFriend(TEXT("mousse"));
+        Bag = StarterInventory();
         Message = TEXT("Mousse vous accompagne. Une gardienne attend près de la lanterne.");
     }
+    // Persist the starter pack/migration once; reloading never refills a V3 bag.
+    if ((bLoaded || !bHadSave) && !SaveProgress()) Message += TEXT(" Sauvegarde impossible : réessayez avec Sauver.");
 }
 
 const FFTMonsterSpecies* UFTAdventureSubsystem::FindSpecies(FName Id) const
@@ -146,6 +151,82 @@ bool UFTAdventureSubsystem::UseSkill(int32 Index)
     return true;
 }
 
+TArray<FFTInventoryItem> UFTAdventureSubsystem::GetInventory() const
+{
+    TArray<FFTInventoryItem> Result;
+    for (const Item& Entry : ItemCatalog())
+    {
+        FFTInventoryItem View;
+        View.Id = FName(UTF8_TO_TCHAR(Entry.Key));
+        View.Name = UTF8_TO_TCHAR(Entry.Name); View.Description = UTF8_TO_TCHAR(Entry.Description);
+        View.Quantity = Bag.Quantity(Entry.Id);
+        View.bUsableOnActive = CanUseItem(View.Id, ActiveFriend);
+        Result.Add(View);
+    }
+    return Result;
+}
+
+int32 UFTAdventureSubsystem::GetItemQuantity(FName Id) const
+{
+    const Item* Entry = FindItem(TCHAR_TO_UTF8(*Id.ToString()));
+    return Entry ? Bag.Quantity(Entry->Id) : 0;
+}
+
+bool UFTAdventureSubsystem::CanUseItem(FName Id, int32 Index) const
+{
+    const Item* Entry = FindItem(TCHAR_TO_UTF8(*Id.ToString()));
+    if (!Entry || !Dialogue.IsEmpty() || bAwaitingReplacement || !Friends.IsValidIndex(Index)) return false;
+    if (bInBattle) return Index == ActiveFriend && Battle.CanUseItem(Bag, Entry->Id);
+    const FFTMonsterStats Target = GetFriendStats(Index);
+    return Bag.Quantity(Entry->Id) > 0 && CanRestore(*Entry, {Target.HP, Target.MP}, Target.MaxHP, Target.MaxMP);
+}
+
+bool UFTAdventureSubsystem::UseItem(FName Id, int32 Index)
+{
+    if (!CanUseItem(Id, Index))
+    {
+        Message = TEXT("Objet indisponible ou sans effet sur cette cible. Aucun objet ni tour dépensé.");
+        return false;
+    }
+    const Item& Entry = *FindItem(TCHAR_TO_UTF8(*Id.ToString()));
+    if (bInBattle)
+    {
+        if (!Battle.UseItem(Bag, Entry.Id)) return false;
+        Message = Entry.Effect == ItemEffect::Befriend ?
+            TEXT("La friandise rassure la créature : +20 points d'amitié jusqu'à la fin du combat. Elle riposte.") :
+            FString::Printf(TEXT("%s utilisé sur %s. La créature riposte."), UTF8_TO_TCHAR(Entry.Name),
+                *FindSpecies(Friends[Index].SpeciesId)->Name);
+        FinishAction();
+    }
+    else
+    {
+        const FFTMonsterStats Stats = GetFriendStats(Index);
+        Resources Target{Stats.HP, Stats.MP};
+        if (!UseRestorative(Bag, Entry.Id, Target, Stats.MaxHP, Stats.MaxMP)) return false;
+        Friends[Index].HP = Target.HP; Friends[Index].MP = Target.MP;
+        Message = FString::Printf(TEXT("%s : %s récupère %d %s."), UTF8_TO_TCHAR(Entry.Name),
+            *FindSpecies(Friends[Index].SpeciesId)->Name, Target.HP - Stats.HP + Target.MP - Stats.MP,
+            Entry.Effect == ItemEffect::HealHP ? TEXT("PV") : TEXT("PM"));
+        if (!SaveProgress()) Message += TEXT(" Sauvegarde impossible : réessayez avec Sauver.");
+    }
+    return true;
+}
+
+FString UFTAdventureSubsystem::AwardItems()
+{
+    const Inventory Loot = VictoryLoot(Kind(EnemyId));
+    FString Summary;
+    for (const Item& Entry : ItemCatalog())
+    {
+        const int32 Quantity = Loot.Quantity(Entry.Id);
+        if (!Quantity) continue;
+        const int32 Added = Bag.Add(Entry.Id, Quantity);
+        Summary += Added > 0 ? FString::Printf(TEXT(" +%d %s."), Added, UTF8_TO_TCHAR(Entry.Name)) :
+            FString::Printf(TEXT(" %s : pile pleine (99)."), UTF8_TO_TCHAR(Entry.Name));
+    }
+    return Summary;
+}
+
 void UFTAdventureSubsystem::Recruit()
 {
     if (Friends.Num() >= 1000) { Message = TEXT("La collection de ce prototype est pleine."); return; }
@@ -219,7 +300,7 @@ void UFTAdventureSubsystem::FinishAction()
         Message += Rewards;
         break;
     case Outcome::Victory:
-        Message = TEXT("La créature s'éloigne. Vous pourrez retenter l'amitié.") + Rewards;
+        Message = TEXT("La créature s'éloigne. Vous pourrez retenter l'amitié.") + Rewards + AwardItems();
         break;
     case Outcome::Defeat:
         HealFriends();
@@ -362,6 +443,9 @@ bool UFTAdventureSubsystem::SaveProgress()
     if (bInBattle || !Dialogue.IsEmpty()) return false;
     UFTAdventureSave* Save = Cast<UFTAdventureSave>(UGameplayStatics::CreateSaveGameObject(UFTAdventureSave::StaticClass()));
     if (!Save) return false;
+    Save->Version = 3;
+    for (const Item& Entry : ItemCatalog())
+        Save->Items.Add(FName(UTF8_TO_TCHAR(Entry.Key)), Bag.Quantity(Entry.Id));
     Save->Friends = Friends; Save->Party = Party;
     Save->ActiveFriend = ActiveFriend;
     Save->bHeardKeeper = bHeardKeeper; Save->bStoryComplete = bStoryComplete;
@@ -372,7 +456,7 @@ bool UFTAdventureSubsystem::LoadProgress()
 {
     if (bInBattle || !Dialogue.IsEmpty() || !UGameplayStatics::DoesSaveGameExist(SaveSlot, 0)) return false;
     const UFTAdventureSave* Save = Cast<UFTAdventureSave>(UGameplayStatics::LoadGameFromSlot(SaveSlot, 0));
-    if (!Save || (Save->Version != 1 && Save->Version != 2) || Save->Friends.IsEmpty() || Save->Friends.Num() > 1000) return false;
+    if (!Save || (Save->Version < 1 || Save->Version > 3) || Save->Friends.IsEmpty() || Save->Friends.Num() > 1000) return false;
     TSet<FGuid> Seen;
     for (const FFTMonsterFriend& Friend : Save->Friends)
     {
@@ -390,6 +474,13 @@ bool UFTAdventureSubsystem::LoadProgress()
     std::vector<int> Input;
     if (Save->Version >= 2) for (int32 Index : Save->Party) Input.push_back(Index);
     const auto Normalized = NormalizeParty(Input, Validated.Num(), Save->ActiveFriend);
+    Inventory SavedBag;
+    for (const Item& Entry : ItemCatalog())
+    {
+        const int32* Count = Save->Items.Find(FName(UTF8_TO_TCHAR(Entry.Key)));
+        if (Count) SavedBag.Add(Entry.Id, *Count);
+    }
+    Bag = RestoreInventory(Save->Version, SavedBag);
     Friends = MoveTemp(Validated);
     Party.Reset(); for (int32 Index : Normalized) Party.Add(Index);
     ActiveFriend = Party.Contains(Save->ActiveFriend) ? Save->ActiveFriend : Party[0];
@@ -401,6 +492,7 @@ bool UFTAdventureSubsystem::LoadProgress()
     bHeardKeeper = Save->bHeardKeeper;
     bStoryComplete = Save->bStoryComplete && HasFriend(TEXT("luciolle"));
     Message = Save->Version == 1 ? TEXT("Ancienne sauvegarde retrouvée : équipe et PM initialisés, compagnons conservés.") :
-        TEXT("Aventure retrouvée : niveaux, compétences, équipe et réserve restaurés.");
+        TEXT("Aventure retrouvée : compagnons, équipe et inventaire restaurés.");
+    if (Save->Version < 3) Message += TEXT(" Sac de départ reçu : 3 baies, 2 rosées et 2 friandises.");
     return true;
 }

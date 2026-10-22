@@ -24,6 +24,10 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I Source/FinalTower/Public Tests/sprite_rules_test.cpp -o /tmp/finaltower-sprites
           /tmp/finaltower-sprites
+      - name: Check inventory, consumables, loot and inventory migration rules
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -I Source/FinalTower/Public Tests/inventory_rules_test.cpp -o /tmp/finaltower-inventory
+          /tmp/finaltower-inventory
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

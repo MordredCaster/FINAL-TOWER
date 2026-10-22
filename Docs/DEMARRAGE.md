@@ -28,7 +28,9 @@ La scène géométrique est construite par `AFTPrototypeGameMode::BeginPlay` dan
 | Attaquer en combat | Bouton Attaquer | 1 |
 | Recruter en combat | Bouton Tendre la main | 2 |
 | Quitter le combat | Bouton Reculer | 3 |
-| Changer de compagnon actif | Bouton Compagnon, hors combat | — |
+| Équipe et réserve / relais en combat | Bouton Équipe | Tab |
+| Inventaire | Bouton Sac, puis objet / cible | I ouvre et ferme le sac |
+| Techniques en combat | Trois boutons de techniques | 4 / 5 / 6 |
 | Sauvegarder | Bouton Sauver, hors dialogue/combat | — |
 
 Un seul doigt est géré dans ce socle. La souris fonctionne sans activer Use Mouse for Touch. L'interface Canvas native sert au prototype ; une interface UMG avec zones sûres, accessibilité et navigation complète est un jalon ultérieur.
@@ -68,3 +70,20 @@ Les images actuelles sont déjà reliées au code et importées automatiquement.
 ## Progression et équipe (0.3)
 
 Le bouton Équipe ou Tab ouvre la gestion des trois membres actifs et de la réserve. En combat, les touches 4/5/6 lancent les techniques apprises ; les choix sans PM sont désactivés. Après un K.-O., choisir un remplaçant avant de continuer. Les rencontres de la zone de test réapparaissent après 12 secondes. Voir [PROGRESSION.md](PROGRESSION.md) pour les règles, la migration des sauvegardes et les contrôles.
+
+## Objets et inventaire (0.4)
+
+Le bouton **Sac** ou la touche **I** ouvre et ferme le sac. Les baies rendent 25 PV, les rosées 8 PM, et les friandises ajoutent 20 points à la probabilité de recrutement pour la rencontre. Une seule friandise peut être donnée par rencontre. En combat, utiliser un objet provoque une riposte ; ouvrir/fermer le sac ne prend aucun tour. Hors combat, les soins peuvent cibler la réserve et sont immédiatement sauvegardés. Le déplacement et les autres raccourcis sont suspendus dans le sac.
+
+À vérifier dans Unreal après compilation :
+
+1. Nouveau départ : 3 baies, 2 rosées, 2 friandises ; tous les objets et quantités sont lisibles en paysage.
+2. Commencer un combat avec des PV manquants ; utiliser une baie, constater le soin plafonné puis une seule riposte, et une quantité en moins.
+3. Dépenser des PM puis utiliser une rosée ; vérifier que le bouton est grisé si les PM sont pleins ou la pile vide.
+4. Donner une friandise : la chance affichée augmente de 20 points (plafond 95 %), une riposte se produit, une deuxième friandise est refusée. Relayer un compagnon : le bonus reste actif.
+5. Gagner contre Roncinet : +1 baie et +1 friandise ; contre Luciolle : +1 rosée. Recruter ou fuir ne donne pas d’objet.
+6. Hors combat, soigner un membre de réserve ; vérifier sa quantité et ses ressources après relance. Une cible K.-O. ou déjà pleine ne consomme rien. Vérifier la pagination avec plus de quatre compagnons.
+7. Charger une sauvegarde V1 ou V2 : collection et progression sont conservées, le sac de départ est ajouté une fois. Consommer un objet, relancer deux fois : la quantité ne se remplit pas.
+8. Finir un combat avec un sac modifié, fermer complètement puis relancer : ressources et objets doivent correspondre au même état sauvegardé. Un combat en cours n’est pas un point de sauvegarde.
+
+Les règles de quantités, d’effets, de tours et de migration ont des tests C++ autonomes ; la sérialisation Unreal et l’interface restent à vérifier dans le moteur. Détails : [INVENTAIRE.md](INVENTAIRE.md).

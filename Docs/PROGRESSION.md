@@ -1,4 +1,4 @@
-# Progression et équipe — prototype 0.3
+# Progression et équipe — prototype 0.4
 
 ## Boucle jouable prévue par le code
 
@@ -83,9 +83,9 @@ Les boutons indisponibles sont grisés. Le menu Équipe présente niveau, PV/PM,
 
 ## Compatibilité des sauvegardes
 
-Le slot existant `FinalTower_Prototype_v1` est conservé ; le schéma interne passe de **1 à 2**. Une sauvegarde du prototype 0.1/0.2 conserve ses identifiants de monstres, espèces, PV, compagnon actif et progression de quête. Les monstres commencent au niveau 1 avec leurs PM initialisés ; une équipe de trois maximum est créée en conservant l'ancien compagnon actif.
+Le slot existant `FinalTower_Prototype_v1` est conservé ; le schéma interne est maintenant **3**, avec l’inventaire ; les versions 1 et 2 restent lisibles. Voir [INVENTAIRE.md](INVENTAIRE.md). Une sauvegarde du prototype 0.1/0.2 conserve ses identifiants de monstres, espèces, PV, compagnon actif et progression de quête. Les monstres commencent au niveau 1 avec leurs PM initialisés ; une équipe de trois maximum est créée en conservant l'ancien compagnon actif.
 
-Les nouvelles sauvegardes conservent XP, PV, PM, membres d'équipe, réserve et compagnon actif. Les indices invalides ou doublons d'équipe sont retirés au chargement ; l'XP et les ressources sont bornées. Les espèces inconnues et identifiants invalides/doublons sont rejetés avant de remplacer la session. Une rencontre ou un dialogue en cours ne se sauvegarde pas.
+Les nouvelles sauvegardes conservent XP, PV, PM, membres d’équipe, réserve, compagnon actif et quantités d’objets. Les indices invalides ou doublons d'équipe sont retirés au chargement ; l'XP et les ressources sont bornées. Les espèces inconnues et identifiants invalides/doublons sont rejetés avant de remplacer la session. Une rencontre ou un dialogue en cours ne se sauvegarde pas.
 
 ## Validation
 

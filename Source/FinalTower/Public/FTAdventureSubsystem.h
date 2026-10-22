@@ -61,17 +61,29 @@ struct FINALTOWER_API FFTMonsterTechnique
     UPROPERTY(BlueprintReadOnly) bool bUsable = false;
 };
 
+USTRUCT(BlueprintType)
+struct FINALTOWER_API FFTInventoryItem
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadOnly) FName Id;
+    UPROPERTY(BlueprintReadOnly) FString Name;
+    UPROPERTY(BlueprintReadOnly) FString Description;
+    UPROPERTY(BlueprintReadOnly) int32 Quantity = 0;
+    UPROPERTY(BlueprintReadOnly) bool bUsableOnActive = false;
+};
+
 UCLASS()
 class FINALTOWER_API UFTAdventureSave : public USaveGame
 {
     GENERATED_BODY()
 public:
-    UPROPERTY(SaveGame) int32 Version = 2;
+    UPROPERTY(SaveGame) int32 Version = 3;
     UPROPERTY(SaveGame) TArray<FFTMonsterFriend> Friends;
     UPROPERTY(SaveGame) bool bHeardKeeper = false;
     UPROPERTY(SaveGame) bool bStoryComplete = false;
     UPROPERTY(SaveGame) int32 ActiveFriend = 0;
     UPROPERTY(SaveGame) TArray<int32> Party;
+    UPROPERTY(SaveGame) TMap<FName, int32> Items;
 };
 
 /** Session state shared by the native prototype and future Blueprint/UI assets. */
@@ -109,6 +121,10 @@ public:
     UFUNCTION(BlueprintPure) TArray<FFTMonsterTechnique> GetTechniques(int32 RosterIndex) const;
     UFUNCTION(BlueprintPure) bool HasFriend(FName SpeciesId) const;
     UFUNCTION(BlueprintPure) FString GetObjective() const;
+    UFUNCTION(BlueprintCallable) bool UseItem(FName ItemId, int32 TargetIndex);
+    UFUNCTION(BlueprintPure) bool CanUseItem(FName ItemId, int32 TargetIndex) const;
+    UFUNCTION(BlueprintPure) int32 GetItemQuantity(FName ItemId) const;
+    UFUNCTION(BlueprintPure) TArray<FFTInventoryItem> GetInventory() const;
 
     const FFTMonsterSpecies* FindSpecies(FName Id) const;
     const FinalTowerRules::Battle& GetBattle() const { return Battle; }
@@ -121,6 +137,7 @@ private:
     FName EnemyId;
     int32 EnemyLevel = 1;
     TSet<FGuid> BattleParticipants;
+    FinalTowerRules::Inventory Bag;
     TArray<FString> DialogueLines;
     int32 DialogueIndex = 0;
     bool bFinishStoryAfterDialogue = false;
@@ -128,4 +145,5 @@ private:
     void FinishAction();
     void HealFriends();
     FString AwardExperience();
+    FString AwardItems();
 };

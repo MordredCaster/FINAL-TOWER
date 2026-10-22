@@ -128,6 +128,8 @@ void AFTPrototypeController::PlayerTick(float DeltaTime)
 
     AFTPrototypeHUD* UI = Cast<AFTPrototypeHUD>(GetHUD());
     const AFTExplorer* Explorer = Cast<AFTExplorer>(GetPawn());
+    if (WasInputKeyJustPressed(EKeys::I) && UI && State->Dialogue.IsEmpty() && !State->bAwaitingReplacement)
+        UI->ToggleInventory();
     if ((UI && UI->IsMenuOpen()) || (Explorer && Explorer->SpriteAnimator->IsMovementLocked()))
     {
         if (GetPawn() && GetPawn()->GetMovementComponent()) GetPawn()->GetMovementComponent()->StopMovementImmediately();
@@ -388,12 +390,13 @@ void AFTPrototypeHUD::DrawHUD()
     Scale = FMath::Max(0.1f, static_cast<float>(Canvas->SizeY) / 720.0f);
     ViewWidth = Canvas->SizeX / Scale;
     ViewHeight = 720;
-    if (State->bAwaitingReplacement) bTeamOpen = true;
+    if (State->bAwaitingReplacement) { bTeamOpen = true; bInventoryOpen = false; }
     if (bTeamOpen) { DrawTeam(); return; }
+    if (bInventoryOpen) { DrawInventory(); return; }
     if (bArtBookOpen) { DrawArtBook(); return; }
     const float Margin = 40;
     DrawRect(FLinearColor(0.025f, 0.05f, 0.075f, 0.94f), 0, 0, Canvas->SizeX, 126 * Scale);
-    Label(TEXT("FINAL TOWER — prototype 0.3"), Margin, 20, FLinearColor(1, 0.8, 0.4));
+    Label(TEXT("FINAL TOWER — prototype 0.4"), Margin, 20, FLinearColor(1, 0.8, 0.4));
     Wrapped(State->GetObjective(), Margin, 55, ViewWidth - 2 * Margin);
     Label(TEXT("Sprites 2D animés • Carnet : personnages, bestiaire et aperçus"), Margin, 96, FLinearColor(0.7, 0.75, 0.8), 0.8f);
 
@@ -440,7 +443,8 @@ void AFTPrototypeHUD::DrawHUD()
         Label(FString::Printf(TEXT("%s niv. %d  %d/%d PV — Amitié : %.0f %%"), Enemy ? *Enemy->Name : TEXT("Créature"),
             State->GetEnemyLevel(), Battle.Enemy.HP, Battle.Enemy.MaxHP, Battle.RecruitmentChance() * 100), Margin, PanelY + 18, FLinearColor(1, 0.8, 0.4));
         Wrapped(State->Message, Margin, PanelY + 55, ViewWidth - 2 * Margin);
-        Label(FString::Printf(TEXT("Protection : %d riposte(s)  |  Ennemi affaibli : %d riposte(s)"), Battle.GuardTurns, Battle.WeakenTurns),
+        Label(FString::Printf(TEXT("Protection : %d  |  Ennemi affaibli : %d  |  Friandise : %s"), Battle.GuardTurns, Battle.WeakenTurns,
+            Battle.Fed ? TEXT("+20 points") : TEXT("non donnée")),
             Margin, 540, FLinearColor(0.7f, 0.85f, 0.7f), 0.85f);
         const auto Skills = State->GetTechniques(State->ActiveFriend);
         const float SkillWidth = FMath::Min(280.0f, (ViewWidth - 112) / 3);
@@ -451,19 +455,22 @@ void AFTPrototypeHUD::DrawHUD()
                 FString::Printf(TEXT("Niv. %d : %s"), Skill.UnlockLevel, *Skill.Name);
             Button(FName(*FString::Printf(TEXT("skill_%d"), Index)), Text, Margin + Index * (SkillWidth + 16), 570, SkillWidth, Skill.bUsable);
         }
-        const float Width = FMath::Min(240.0f, (ViewWidth - 128) / 4);
+        const float Width = FMath::Min(220.0f, (ViewWidth - 144) / 5);
         Button(TEXT("attack"), TEXT("1. Attaquer"), Margin, 642, Width);
         Button(TEXT("recruit"), TEXT("2. Amitié"), Margin + Width + 16, 642, Width);
         Button(TEXT("escape"), TEXT("3. Reculer"), Margin + 2 * (Width + 16), 642, Width);
         Button(TEXT("team"), TEXT("Équipe · Tab"), Margin + 3 * (Width + 16), 642, Width);
+        Button(TEXT("inventory"), TEXT("Sac · I"), Margin + 4 * (Width + 16), 642, Width);
     }
     else
     {
         Wrapped(State->Message, Margin, PanelY + 24, ViewWidth - 2 * Margin);
-        Button(TEXT("companion"), TEXT("Équipe"), Margin, 625, 160);
-        Button(TEXT("save"), TEXT("Sauver"), Margin + 176, 625, 110);
-        Button(TEXT("artbook"), TEXT("Carnet"), Margin + 302, 625, 110);
-        Button(TEXT("interact"), TEXT("Interagir"), ViewWidth - 230, 625, 190);
+        const float Width = FMath::Min(200.0f, (ViewWidth - 144) / 5);
+        Button(TEXT("companion"), TEXT("Équipe"), Margin, 625, Width);
+        Button(TEXT("inventory"), TEXT("Sac · I"), Margin + Width + 16, 625, Width);
+        Button(TEXT("save"), TEXT("Sauver"), Margin + 2 * (Width + 16), 625, Width);
+        Button(TEXT("artbook"), TEXT("Carnet"), Margin + 3 * (Width + 16), 625, Width);
+        Button(TEXT("interact"), TEXT("Interagir"), Margin + 4 * (Width + 16), 625, Width);
     }
     if (const AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner))
     {
@@ -502,6 +509,31 @@ void AFTPrototypeHUD::Act(FName Action)
     {
         if (AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner)) Control->BattleAction(Action);
     }
+    else if (Action == TEXT("inventory")) ToggleInventory();
+    else if (Action == TEXT("closebag")) bInventoryOpen = false;
+    else if (Action == TEXT("bagback")) { SelectedItem = -1; InventoryPage = 0; }
+    else if (Action == TEXT("bagprev")) InventoryPage = FMath::Max(0, InventoryPage - 1);
+    else if (Action == TEXT("bagnext")) InventoryPage = FMath::Min((State->Friends.Num() - 1) / 4, InventoryPage + 1);
+    else if (Action.ToString().StartsWith(TEXT("bagitem_")))
+    {
+        const int32 Index = FCString::Atoi(*Action.ToString().RightChop(8));
+        if (Index < 0 || Index >= FinalTowerRules::ItemCount) return;
+        const auto& Entry = FinalTowerRules::ItemCatalog()[Index];
+        const FName Id(UTF8_TO_TCHAR(Entry.Key));
+        if (State->GetItemQuantity(Id) <= 0) return;
+        if (State->bInBattle || Entry.Effect == FinalTowerRules::ItemEffect::Befriend)
+        {
+            if (State->UseItem(Id, State->ActiveFriend)) bInventoryOpen = false;
+        }
+        else { SelectedItem = Index; InventoryPage = 0; }
+    }
+    else if (Action.ToString().StartsWith(TEXT("bagtarget_")))
+    {
+        if (SelectedItem < 0 || SelectedItem >= FinalTowerRules::ItemCount) return;
+        const auto& Entry = FinalTowerRules::ItemCatalog()[SelectedItem];
+        const int32 Index = FCString::Atoi(*Action.ToString().RightChop(10));
+        State->UseItem(FName(UTF8_TO_TCHAR(Entry.Key)), Index);
+    }
     else if (Action == TEXT("companion") || Action == TEXT("team")) OpenTeam();
     else if (Action == TEXT("closeteam")) bTeamOpen = false;
     else if (Action == TEXT("teamprev")) TeamPage = FMath::Max(0, TeamPage - 1);
@@ -515,7 +547,7 @@ void AFTPrototypeHUD::Act(FName Action)
     else if (Action.ToString().StartsWith(TEXT("toggle_")))
         State->TogglePartyMember(FCString::Atoi(*Action.ToString().RightChop(7)));
     else if (Action == TEXT("save"))
-        State->Message = State->SaveProgress() ? TEXT("Compagnons et histoire sauvegardés.") : TEXT("Sauvegarde impossible. Réessayez.");
+        State->Message = State->SaveProgress() ? TEXT("Compagnons, inventaire et histoire sauvegardés.") : TEXT("Sauvegarde impossible. Réessayez.");
     else if (Action == TEXT("artbook")) { bArtBookOpen = true; ArtPage = 0; }
     else if (Action == TEXT("closebook")) bArtBookOpen = false;
     else if (Action == TEXT("nextpage")) ArtPage = (ArtPage + 1) % 5;
@@ -530,6 +562,77 @@ void AFTPrototypeHUD::Act(FName Action)
             bArtBookOpen = false;
         }
     }
+}
+
+void AFTPrototypeHUD::ToggleInventory()
+{
+    const UFTAdventureSubsystem* State = Adventure(this);
+    if (!State || !State->Dialogue.IsEmpty() || State->bAwaitingReplacement) return;
+    bInventoryOpen = !bInventoryOpen;
+    if (bInventoryOpen) { bTeamOpen = false; bArtBookOpen = false; SelectedItem = -1; InventoryPage = 0; }
+}
+
+void AFTPrototypeHUD::DrawInventory()
+{
+    UFTAdventureSubsystem* State = Adventure(this);
+    if (!State) return;
+    DrawRect(FLinearColor(0.025f, 0.035f, 0.05f, 1), 0, 0, Canvas->SizeX, Canvas->SizeY);
+    Label(TEXT("SAC — objets partagés"), 40, 20, FLinearColor(1, 0.8f, 0.4f));
+    Wrapped(State->bInBattle ? TEXT("Un objet prend un tour et provoque une riposte. Les soins ciblent le compagnon actif.") :
+        TEXT("Choisissez un soin puis un compagnon, y compris en réserve. Piles de 99 maximum."), 40, 62, ViewWidth - 80);
+    if (State->bInBattle && State->Friends.IsValidIndex(State->ActiveFriend))
+    {
+        const auto Stats = State->GetFriendStats(State->ActiveFriend);
+        const FFTMonsterSpecies* Species = State->FindSpecies(State->Friends[State->ActiveFriend].SpeciesId);
+        Label(FString::Printf(TEXT("Actif : %s · PV %d/%d · PM %d/%d"), Species ? *Species->Name : TEXT("Compagnon"),
+            Stats.HP, Stats.MaxHP, Stats.MP, Stats.MaxMP), 40, 96, FLinearColor(0.75f, 0.85f, 0.8f), 0.85f);
+    }
+    if (SelectedItem < 0 || SelectedItem >= FinalTowerRules::ItemCount)
+    {
+        int32 Row = 0;
+        for (const auto& Entry : FinalTowerRules::ItemCatalog())
+        {
+            const float Y = 128 + Row * 126;
+            const FName Id(UTF8_TO_TCHAR(Entry.Key));
+            const int32 Quantity = State->GetItemQuantity(Id);
+            Label(FString::Printf(TEXT("%s  × %d / 99"), UTF8_TO_TCHAR(Entry.Name), Quantity), 40, Y,
+                Quantity > 0 ? FLinearColor::White : FLinearColor(0.5f, 0.5f, 0.5f));
+            Wrapped(UTF8_TO_TCHAR(Entry.Description), 40, Y + 32, ViewWidth - 300);
+            const bool Food = Entry.Effect == FinalTowerRules::ItemEffect::Befriend;
+            const bool Enabled = State->bInBattle ? State->CanUseItem(Id, State->ActiveFriend) : Quantity > 0 && !Food;
+            Button(FName(*FString::Printf(TEXT("bagitem_%d"), Row)),
+                Food ? TEXT("Offrir") : (State->bInBattle ? TEXT("Utiliser") : TEXT("Choisir")), ViewWidth - 210, Y, 170, Enabled);
+            ++Row;
+        }
+        if (!State->bInBattle) Label(TEXT("Les friandises s'offrent pendant une rencontre."), 40, 510, FLinearColor(0.75f, 0.8f, 0.85f), 0.85f);
+    }
+    else
+    {
+        const auto& Entry = FinalTowerRules::ItemCatalog()[SelectedItem];
+        const FName Id(UTF8_TO_TCHAR(Entry.Key));
+        Label(FString::Printf(TEXT("%s × %d — choisir la cible"), UTF8_TO_TCHAR(Entry.Name), State->GetItemQuantity(Id)), 40, 122);
+        InventoryPage = FMath::Clamp(InventoryPage, 0, FMath::Max(0, (State->Friends.Num() - 1) / 4));
+        for (int32 Row = 0; Row < 4; ++Row)
+        {
+            const int32 Index = InventoryPage * 4 + Row;
+            if (!State->Friends.IsValidIndex(Index)) break;
+            const auto Stats = State->GetFriendStats(Index);
+            const FFTMonsterSpecies* Species = State->FindSpecies(State->Friends[Index].SpeciesId);
+            if (!Species) continue;
+            const float Y = 180 + Row * 80;
+            Label(FString::Printf(TEXT("#%d %s N%d · %s"), Index + 1, *Species->Name, Stats.Level,
+                State->Party.Contains(Index) ? TEXT("Équipe") : TEXT("Réserve")), 40, Y);
+            Label(FString::Printf(TEXT("PV %d/%d  ·  PM %d/%d%s"), Stats.HP, Stats.MaxHP, Stats.MP, Stats.MaxMP,
+                Stats.HP == 0 ? TEXT("  ·  K.-O.") : TEXT("")), 40, Y + 28, FLinearColor(0.75f, 0.8f, 0.85f), 0.85f);
+            Button(FName(*FString::Printf(TEXT("bagtarget_%d"), Index)), TEXT("Soigner"), ViewWidth - 210, Y, 170, State->CanUseItem(Id, Index));
+        }
+        Label(FString::Printf(TEXT("Page %d / %d"), InventoryPage + 1, (State->Friends.Num() + 3) / 4), 40, 510);
+        Button(TEXT("bagprev"), TEXT("Précédent"), 40, 642, 150, InventoryPage > 0);
+        Button(TEXT("bagnext"), TEXT("Suivant"), 206, 642, 130, (InventoryPage + 1) * 4 < State->Friends.Num());
+        Button(TEXT("bagback"), TEXT("Objets"), 352, 642, 130);
+    }
+    Wrapped(State->Message, 40, 550, ViewWidth - 80);
+    Button(TEXT("closebag"), TEXT("Fermer · I"), ViewWidth - 210, 642, 170);
 }
 
 void AFTPrototypeHUD::DrawTeam()

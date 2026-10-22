@@ -1,5 +1,5 @@
 #pragma once
-#include "FTProgressionRules.h"
+#include "FTInventoryRules.h"
 
 // Engine-independent rules, also exercised by Tests/battle_rules_test.cpp.
 namespace FinalTowerRules
@@ -29,6 +29,7 @@ struct Battle
     int GuardTurns = 0;
     int WeakenPower = 0;
     int WeakenTurns = 0;
+    bool Fed = false;
 
     bool CanAct() const
     {
@@ -40,7 +41,8 @@ struct Battle
         if (!CanAct() || !Recruitable || Enemy.MaxHP <= 0) return 0.0f;
         const float Ratio = static_cast<float>(Enemy.HP) / Enemy.MaxHP;
         const float Missing = Ratio < 0.0f ? 1.0f : (Ratio > 1.0f ? 0.0f : 1.0f - Ratio);
-        return 0.15f + Missing * 0.65f;
+        const float Chance = 0.15f + Missing * 0.65f + (Fed ? 0.20f : 0.0f);
+        return Chance > 0.95f ? 0.95f : Chance;
     }
 
     void Retaliate()
@@ -78,6 +80,32 @@ struct Battle
     {
         if (!CanAct()) return false;
         Result = Outcome::Escaped;
+        return true;
+    }
+
+    bool CanUseItem(const Inventory& Bag, ItemId Id) const
+    {
+        const Item* Entry = FindItem(Id);
+        if (!CanAct() || !Entry || Bag.Quantity(Id) == 0) return false;
+        return Entry->Effect == ItemEffect::Befriend ? Recruitable && !Fed :
+            CanRestore(*Entry, {Ally.HP, Ally.MP}, Ally.MaxHP, Ally.MaxMP);
+    }
+
+    bool UseItem(Inventory& Bag, ItemId Id)
+    {
+        if (!CanUseItem(Bag, Id)) return false;
+        if (FindItem(Id)->Effect == ItemEffect::Befriend)
+        {
+            Bag.Consume(Id);
+            Fed = true;
+        }
+        else
+        {
+            Resources Target{Ally.HP, Ally.MP};
+            if (!UseRestorative(Bag, Id, Target, Ally.MaxHP, Ally.MaxMP)) return false;
+            Ally.HP = Target.HP; Ally.MP = Target.MP;
+        }
+        Retaliate();
         return true;
     }
 
