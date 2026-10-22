@@ -27,7 +27,8 @@ void UFTAdventureSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     Super::Initialize(Collection);
     Species = {
         MakeSpecies(TEXT("mousse"), TEXT("Mousse"), 40, 8, 2),
-        MakeSpecies(TEXT("luciolle"), TEXT("Luciolle"), 30, 6, 1)
+        MakeSpecies(TEXT("luciolle"), TEXT("Luciolle"), 30, 6, 1),
+        MakeSpecies(TEXT("roncinet"), TEXT("Roncinet"), 38, 7, 3)
     };
     if (!LoadProgress())
     {
@@ -106,14 +107,21 @@ void UFTAdventureSubsystem::FinishAction()
     {
     case Outcome::Recruited:
         AddFriend(EnemyId);
-        Message = TEXT("Luciolle se pose sur votre épaule. Une mélodie semble venir de sa lumière...");
+        if (EnemyId == TEXT("luciolle"))
+            Message = TEXT("Luciolle se pose sur votre épaule. Une mélodie semble venir de sa lumière...");
+        else
+        {
+            const FFTMonsterSpecies* Recruited = FindSpecies(EnemyId);
+            Message = FString::Printf(TEXT("%s accepte votre amitié et rejoint vos compagnons."),
+                Recruited ? *Recruited->Name : TEXT("La créature"));
+        }
         break;
     case Outcome::Victory:
-        Message = TEXT("La créature s'enfuit dans les roseaux. Elle reviendra : vous pourrez retenter l'amitié.");
+        Message = TEXT("La créature s'éloigne. Elle reviendra : vous pourrez retenter l'amitié.");
         break;
     case Outcome::Defeat:
         HealFriends();
-        Message = TEXT("Mousse se relève après une pause. La gardienne vous invite à réessayer.");
+        Message = TEXT("Votre compagnon se relève après une pause. La gardienne vous invite à réessayer.");
         break;
     default:
         break;

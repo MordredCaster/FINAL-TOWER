@@ -14,6 +14,9 @@ class UStaticMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
 class UPawnMovementComponent;
+class UFTSpriteAnimator;
+class AFTMonsterVisual;
+class UTexture2D;
 
 /** Floating top-down pawn with a replaceable 2D visual in a 3D scene. */
 UCLASS()
@@ -29,6 +32,7 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UBoxComponent> Body;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UFloatingPawnMovement> Movement;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPaperFlipbookComponent> PixelVisual;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UFTSpriteAnimator> SpriteAnimator;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMeshComponent> Placeholder;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<USpringArmComponent> CameraArm;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UCameraComponent> Camera;
@@ -42,6 +46,7 @@ public:
     AFTPrototypeController();
     virtual void PlayerTick(float DeltaTime) override;
     void Interact();
+    void BattleAction(FName Action);
     bool IsDragging() const { return bDragging; }
     FVector2D GetDragOrigin() const { return DragOrigin; }
     FVector2D GetDragPosition() const { return DragPosition; }
@@ -66,11 +71,14 @@ public:
 
     static FVector KeeperPosition() { return FVector(-220, -280, 50); }
     static FVector EncounterPosition() { return FVector(420, 320, 50); }
+    static FVector RoncinetPosition() { return FVector(380, -120, 0); }
 
 private:
     UPROPERTY() TObjectPtr<AActor> PrototypeStart;
     UPROPERTY() TObjectPtr<AActor> EncounterMarker;
     UPROPERTY() TObjectPtr<AActor> LanternMarker;
+    UPROPERTY() TObjectPtr<AFTMonsterVisual> Roncinet;
+    UPROPERTY() TObjectPtr<AFTMonsterVisual> Companion;
     AActor* MakeShape(const TCHAR* MeshPath, const FVector& Location, const FVector& Scale, bool bCollision = false);
 };
 
@@ -81,6 +89,7 @@ class FINALTOWER_API AFTPrototypeHUD : public AHUD
 public:
     virtual void DrawHUD() override;
     bool HandleTap(FVector2D Position);
+    bool IsArtBookOpen() const { return bArtBookOpen; }
 
 private:
     struct FButton
@@ -90,6 +99,9 @@ private:
         FVector2D Size;
     };
     TArray<FButton> Buttons;
+    UPROPERTY() TArray<TObjectPtr<UTexture2D>> ArtPages;
+    bool bArtBookOpen = false;
+    int32 ArtPage = 0;
     float Scale = 1.0f;
     float ViewWidth = 1280.0f;
     float ViewHeight = 720.0f;
@@ -97,4 +109,5 @@ private:
     void Wrapped(const FString& Text, float X, float Y, float Width);
     void Button(FName Action, const FString& Text, float X, float Y, float Width);
     void Act(FName Action);
+    void DrawArtBook();
 };

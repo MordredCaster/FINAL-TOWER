@@ -1,5 +1,6 @@
 #include "FTPrototype.h"
 #include "FTAdventureSubsystem.h"
+#include "FTSpriteAnimator.h"
 #include "Camera/CameraComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -12,6 +13,7 @@
 #include "Engine/SkyLight.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerStart.h"
@@ -47,8 +49,10 @@ AFTExplorer::AFTExplorer()
 
     PixelVisual = CreateDefaultSubobject<UPaperFlipbookComponent>(TEXT("PixelVisual"));
     PixelVisual->SetupAttachment(Body);
-    PixelVisual->SetRelativeLocation(FVector(0, 0, -32));
+    PixelVisual->SetRelativeLocation(FVector(0, 0, -40));
     PixelVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    PixelVisual->SetCastShadow(false);
+    SpriteAnimator = CreateDefaultSubobject<UFTSpriteAnimator>(TEXT("SpriteAnimator"));
 
     Placeholder = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Placeholder"));
     Placeholder->SetupAttachment(Body);
@@ -70,7 +74,8 @@ AFTExplorer::AFTExplorer()
 void AFTExplorer::BeginPlay()
 {
     Super::BeginPlay();
-    Placeholder->SetVisibility(PixelVisual->GetFlipbook() == nullptr);
+    const bool bReady = SpriteAnimator->ConfigureVisual(TEXT("hero"), PixelVisual);
+    Placeholder->SetVisibility(!bReady);
 }
 
 UPawnMovementComponent* AFTExplorer::GetMovementComponent() const
@@ -86,12 +91,9 @@ void AFTExplorer::Tick(float DeltaSeconds)
     Position.Y = FMath::Clamp(Position.Y, -680.0, 680.0);
     Position.Z = 40.0;
     SetActorLocation(Position);
-    // A sprite occupies its local X/Z plane. Face its normal towards the fixed camera.
-    if (PixelVisual->GetFlipbook())
-    {
-        const float CameraYaw = Camera->GetComponentRotation().Yaw;
-        PixelVisual->SetWorldRotation(FRotator(0, CameraYaw + 90, 0));
-    }
+    const UFTAdventureSubsystem* State = Adventure(this);
+    const bool bWalking = GetVelocity().SizeSquared2D() > 4 && State && !State->bInBattle && State->Dialogue.IsEmpty();
+    SpriteAnimator->SetLocomotion(bWalking, GetVelocity().GetSafeNormal2D());
 }
 
 AFTPrototypeController::AFTPrototypeController()
@@ -124,12 +126,21 @@ void AFTPrototypeController::PlayerTick(float DeltaTime)
     if (!bDown) bDragging = false;
     bPointerWasDown = bDown;
 
+    const AFTPrototypeHUD* UI = Cast<AFTPrototypeHUD>(GetHUD());
+    const AFTExplorer* Explorer = Cast<AFTExplorer>(GetPawn());
+    if ((UI && UI->IsArtBookOpen()) || (Explorer && Explorer->SpriteAnimator->IsMovementLocked()))
+    {
+        if (GetPawn() && GetPawn()->GetMovementComponent()) GetPawn()->GetMovementComponent()->StopMovementImmediately();
+        bDragging = false;
+        return;
+    }
+
     if (WasInputKeyJustPressed(EKeys::E) || WasInputKeyJustPressed(EKeys::SpaceBar)) Interact();
     if (State->bInBattle)
     {
-        if (WasInputKeyJustPressed(EKeys::One)) State->Attack();
-        if (WasInputKeyJustPressed(EKeys::Two)) State->Recruit();
-        if (WasInputKeyJustPressed(EKeys::Three)) State->Escape();
+        if (WasInputKeyJustPressed(EKeys::One)) BattleAction(TEXT("attack"));
+        if (WasInputKeyJustPressed(EKeys::Two)) BattleAction(TEXT("recruit"));
+        if (WasInputKeyJustPressed(EKeys::Three)) BattleAction(TEXT("escape"));
     }
 
     APawn* Controlled = GetPawn();
@@ -166,6 +177,24 @@ void AFTPrototypeController::Interact()
     if (!State->Dialogue.IsEmpty()) { State->AdvanceDialogue(); return; }
     AFTPrototypeGameMode* Mode = Cast<AFTPrototypeGameMode>(UGameplayStatics::GetGameMode(this));
     if (Mode && GetPawn()) Mode->InteractAt(GetPawn()->GetActorLocation());
+}
+
+void AFTPrototypeController::BattleAction(FName Action)
+{
+    UFTAdventureSubsystem* State = Adventure(this);
+    if (!State || !State->bInBattle) return;
+    AFTExplorer* Explorer = Cast<AFTExplorer>(GetPawn());
+    if (Action == TEXT("attack"))
+    {
+        if (Explorer) Explorer->SpriteAnimator->PlayAction(TEXT("combat"));
+        State->Attack();
+    }
+    else if (Action == TEXT("recruit"))
+    {
+        if (Explorer) Explorer->SpriteAnimator->PlayAction(TEXT("spell"));
+        State->Recruit();
+    }
+    else if (Action == TEXT("escape")) State->Escape();
 }
 
 AFTPrototypeGameMode::AFTPrototypeGameMode()
@@ -215,7 +244,13 @@ void AFTPrototypeGameMode::BeginPlay()
     MakeShape(Cone, FVector(-150, -400, 145), FVector(3.3, 2.4, 1.2));
     MakeShape(Cylinder, KeeperPosition(), FVector(0.45, 0.45, 1.0));
     LanternMarker = MakeShape(Sphere, KeeperPosition() + FVector(0, 75, 40), FVector(0.25));
-    EncounterMarker = MakeShape(Sphere, EncounterPosition(), FVector(0.6));
+    AFTMonsterVisual* Luciolle = GetWorld()->SpawnActor<AFTMonsterVisual>(EncounterPosition(), FRotator::ZeroRotator);
+    if (Luciolle) Luciolle->Configure(TEXT("luciolle"));
+    EncounterMarker = Luciolle;
+    Roncinet = GetWorld()->SpawnActor<AFTMonsterVisual>(RoncinetPosition(), FRotator::ZeroRotator);
+    if (Roncinet) Roncinet->Configure(TEXT("roncinet"));
+    Companion = GetWorld()->SpawnActor<AFTMonsterVisual>(FVector(-100, 80, 0), FRotator::ZeroRotator);
+    if (Companion) Companion->Configure(TEXT("mousse"));
 
     // Distant tower is only a visual landmark. The larger setting remains open for design.
     MakeShape(Cylinder, FVector(900, 650, 180), FVector(1.6, 1.6, 4.0));
@@ -249,6 +284,21 @@ void AFTPrototypeGameMode::Tick(float DeltaSeconds)
     const UFTAdventureSubsystem* State = Adventure(this);
     if (!State) return;
     if (EncounterMarker) EncounterMarker->SetActorHiddenInGame(State->HasFriend(TEXT("luciolle")));
+    if (Roncinet) Roncinet->SetActorHiddenInGame(State->HasFriend(TEXT("roncinet")));
+    if (const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0))
+    {
+        if (AFTMonsterVisual* Light = Cast<AFTMonsterVisual>(EncounterMarker)) Light->FacePlayer(Player->GetActorLocation());
+        if (Roncinet) Roncinet->FacePlayer(Player->GetActorLocation());
+        if (Companion && State->Friends.IsValidIndex(State->ActiveFriend))
+        {
+            const FName Id = State->Friends[State->ActiveFriend].SpeciesId;
+            Companion->Configure(Id);
+            // Until monster walk sheets exist, use an idle companion next to the player.
+            const FVector Position = Player->GetActorLocation() + FVector(-70, -70, Id == TEXT("luciolle") ? -10 : -40);
+            Companion->SetActorLocation(Position);
+            Companion->FacePlayer(Player->GetActorLocation());
+        }
+    }
     if (LanternMarker)
         LanternMarker->SetActorScale3D(FVector(State->bStoryComplete ? 0.5 : 0.25));
 }
@@ -261,8 +311,10 @@ void AFTPrototypeGameMode::InteractAt(const FVector& Position)
         State->TalkToKeeper();
     else if (!State->HasFriend(TEXT("luciolle")) && FVector::Dist2D(Position, EncounterPosition()) < 170)
         State->BeginEncounter(TEXT("luciolle"));
+    else if (!State->HasFriend(TEXT("roncinet")) && FVector::Dist2D(Position, RoncinetPosition()) < 170)
+        State->BeginEncounter(TEXT("roncinet"));
     else
-        State->Message = TEXT("Approchez de la gardienne ou de la lumière près des roseaux, puis touchez Interagir.");
+        State->Message = TEXT("Approchez de la gardienne, de Luciolle ou de Roncinet, puis touchez Interagir.");
 }
 
 void AFTPrototypeHUD::Label(const FString& Text, float X, float Y, FLinearColor Color, float TextScale)
@@ -309,11 +361,12 @@ void AFTPrototypeHUD::DrawHUD()
     Scale = FMath::Max(0.1f, static_cast<float>(Canvas->SizeY) / 720.0f);
     ViewWidth = Canvas->SizeX / Scale;
     ViewHeight = 720;
+    if (bArtBookOpen) { DrawArtBook(); return; }
     const float Margin = 40;
     DrawRect(FLinearColor(0.025f, 0.05f, 0.075f, 0.94f), 0, 0, Canvas->SizeX, 126 * Scale);
-    Label(TEXT("FINAL TOWER — prototype 0.1"), Margin, 20, FLinearColor(1, 0.8, 0.4));
+    Label(TEXT("FINAL TOWER — prototype 0.2"), Margin, 20, FLinearColor(1, 0.8, 0.4));
     Wrapped(State->GetObjective(), Margin, 55, ViewWidth - 2 * Margin);
-    Label(TEXT("Visuels provisoires • sprites 2D / décors 3D à venir"), Margin, 96, FLinearColor(0.7, 0.75, 0.8), 0.8f);
+    Label(TEXT("Sprites 2D animés • Carnet : personnages, bestiaire et aperçus"), Margin, 96, FLinearColor(0.7, 0.75, 0.8), 0.8f);
 
     if (State->Friends.IsValidIndex(State->ActiveFriend))
     {
@@ -328,13 +381,15 @@ void AFTPrototypeHUD::DrawHUD()
 
     if (!State->bInBattle && State->Dialogue.IsEmpty())
     {
-        for (int32 Index = 0; Index < 2; ++Index)
+        for (int32 Index = 0; Index < 3; ++Index)
         {
             if (Index == 1 && State->HasFriend(TEXT("luciolle"))) continue;
-            const FVector World = Index == 0 ? AFTPrototypeGameMode::KeeperPosition() : AFTPrototypeGameMode::EncounterPosition();
+            if (Index == 2 && State->HasFriend(TEXT("roncinet"))) continue;
+            const FVector World = Index == 0 ? AFTPrototypeGameMode::KeeperPosition() :
+                (Index == 1 ? AFTPrototypeGameMode::EncounterPosition() : AFTPrototypeGameMode::RoncinetPosition());
             FVector2D Screen;
             if (PlayerOwner && PlayerOwner->ProjectWorldLocationToScreen(World + FVector(0, 0, 80), Screen))
-                Label(Index == 0 ? TEXT("Gardienne") : TEXT("Lumière des roseaux"), Screen.X / Scale, Screen.Y / Scale);
+                Label(Index == 0 ? TEXT("Gardienne") : (Index == 1 ? TEXT("Luciolle") : TEXT("Roncinet")), Screen.X / Scale, Screen.Y / Scale);
         }
         Label(TEXT("Glisser pour marcher • clavier : ZQSD / WASD • E : interagir"), Margin, 185, FLinearColor(0.8, 0.85, 0.9), 0.85f);
     }
@@ -362,8 +417,9 @@ void AFTPrototypeHUD::DrawHUD()
     else
     {
         Wrapped(State->Message, Margin, PanelY + 24, ViewWidth - 2 * Margin);
-        Button(TEXT("companion"), TEXT("Compagnon"), Margin, 625, 190);
-        Button(TEXT("save"), TEXT("Sauver"), Margin + 206, 625, 145);
+        Button(TEXT("companion"), TEXT("Compagnon"), Margin, 625, 160);
+        Button(TEXT("save"), TEXT("Sauver"), Margin + 176, 625, 110);
+        Button(TEXT("artbook"), TEXT("Carnet"), Margin + 302, 625, 110);
         Button(TEXT("interact"), TEXT("Interagir"), ViewWidth - 230, 625, 190);
     }
     if (const AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner))
@@ -399,10 +455,61 @@ void AFTPrototypeHUD::Act(FName Action)
     {
         if (AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner)) Control->Interact();
     }
-    else if (Action == TEXT("attack")) State->Attack();
-    else if (Action == TEXT("recruit")) State->Recruit();
-    else if (Action == TEXT("escape")) State->Escape();
+    else if (Action == TEXT("attack") || Action == TEXT("recruit") || Action == TEXT("escape"))
+    {
+        if (AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner)) Control->BattleAction(Action);
+    }
     else if (Action == TEXT("companion")) State->NextCompanion();
     else if (Action == TEXT("save"))
         State->Message = State->SaveProgress() ? TEXT("Compagnons et histoire sauvegardés.") : TEXT("Sauvegarde impossible. Réessayez.");
+    else if (Action == TEXT("artbook")) { bArtBookOpen = true; ArtPage = 0; }
+    else if (Action == TEXT("closebook")) bArtBookOpen = false;
+    else if (Action == TEXT("nextpage")) ArtPage = (ArtPage + 1) % 5;
+    else if (Action == TEXT("previouspage")) ArtPage = (ArtPage + 4) % 5;
+    else if (Action.ToString().StartsWith(TEXT("preview_")))
+    {
+        if (AFTExplorer* Explorer = Cast<AFTExplorer>(PlayerOwner->GetPawn()))
+        {
+            const FName Clip(*Action.ToString().RightChop(8));
+            const bool bPlayed = Explorer->SpriteAnimator->PlayAction(Clip, 3.0f, true);
+            State->Message = bPlayed ? TEXT("Aperçu de l'animation pendant 3 secondes.") : TEXT("Animation absente : vérifier l'import GeneratedArt dans l'éditeur.");
+            bArtBookOpen = false;
+        }
+    }
+}
+
+void AFTPrototypeHUD::DrawArtBook()
+{
+    if (ArtPages.IsEmpty())
+    {
+        const TCHAR* Names[] = { TEXT("hero"), TEXT("brother"), TEXT("mousse"), TEXT("roncinet"), TEXT("luciolle") };
+        for (const TCHAR* Name : Names)
+        {
+            const FString Path = FString::Printf(TEXT("/Game/GeneratedArt/Concepts/T_%s.T_%s"), Name, Name);
+            ArtPages.Add(LoadObject<UTexture2D>(nullptr, *Path));
+        }
+    }
+    DrawRect(FLinearColor(0.025f, 0.035f, 0.05f, 1), 0, 0, Canvas->SizeX, Canvas->SizeY);
+    Label(TEXT("CARNET — personnages et bestiaire"), 40, 20, FLinearColor(1, 0.8, 0.4));
+    if (ArtPages.IsValidIndex(ArtPage) && ArtPages[ArtPage])
+    {
+        UTexture2D* Page = ArtPages[ArtPage];
+        const float Ratio = static_cast<float>(Page->GetSizeX()) / Page->GetSizeY();
+        const float Width = FMath::Min(ViewWidth - 80, 480 * Ratio);
+        const float Height = Width / Ratio;
+        DrawTexture(Page, (ViewWidth - Width) * 0.5f * Scale, 65 * Scale, Width * Scale, Height * Scale,
+            0, 0, 1, 1, FLinearColor::White, BLEND_Translucent);
+    }
+    else Wrapped(TEXT("Planche absente : ouvrir le projet dans l'éditeur pour générer les assets."), 40, 100, ViewWidth - 80);
+    if (ArtPage == 0)
+    {
+        const TCHAR* Actions[] = { TEXT("idle"), TEXT("walk"), TEXT("combat"), TEXT("spell"), TEXT("sit"), TEXT("hurt"), TEXT("dying") };
+        const TCHAR* Labels[] = { TEXT("Repos"), TEXT("Marche"), TEXT("Poing"), TEXT("Magie"), TEXT("Assis"), TEXT("Blessé"), TEXT("Chute") };
+        const float Width = FMath::Min(110.0f, (ViewWidth - 80 - 6 * 8) / 7);
+        for (int32 Index = 0; Index < 7; ++Index)
+            Button(FName(*(FString(TEXT("preview_")) + Actions[Index])), Labels[Index], 40 + Index * (Width + 8), 574, Width);
+    }
+    Button(TEXT("previouspage"), TEXT("Précédent"), 40, 642, 170);
+    Button(TEXT("nextpage"), TEXT("Suivant"), 226, 642, 170);
+    Button(TEXT("closebook"), TEXT("Fermer"), ViewWidth - 210, 642, 170);
 }

@@ -12,3 +12,5 @@
 *.xcworkspace/
 .DS_Store
 /Tests/.build/
+/Content/GeneratedArt/
+__pycache__/

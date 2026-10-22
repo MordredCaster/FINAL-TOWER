@@ -4,9 +4,9 @@ Un RPG mobile d'aventure : **explorer, se lier d'amitié avec des monstres et vi
 
 Projet natif **Unreal Engine 5.8**, paysage, solo hors ligne. Direction visée : personnages 2D en pixel art dans des décors 3D simples, avec une caméra fixe et une lumière soignée. Dragon Quest V inspire le sentiment d'aventure ; Octopath Traveler et Tactics Ogre: Reborn sont des références visuelles, avec des personnages et un univers originaux.
 
-## État du projet — 0.1
+## État du projet — 0.2
 
-Premier socle de code et scène de test générée au lancement. **Ce dépôt ne contient pas encore de graphismes finaux, de carte artistique ni d'APK.** Les personnages sont représentés par des formes géométriques. La caméra est fixe en orientation et suit le héros.
+Socle de code et scène de test 3D générée au lancement, maintenant reliés aux sprites du héros et des trois monstres. **Les 15 images sources et 10 atlas sont inclus ; les assets Paper2D sont construits automatiquement au premier lancement de l'éditeur.** Les décors restent géométriques. La compilation Unreal et le rendu sur appareil n'ont pas encore été validés ; aucun APK n'est fourni.
 
 Fonctionnalités implémentées dans le code :
 
@@ -17,18 +17,22 @@ Fonctionnalités implémentées dans le code :
 - Collection persistante et changement du compagnon actif hors combat.
 - Courte quête originale : **La lanterne du passeur**.
 - Sauvegarde locale des compagnons, de leurs PV, du compagnon actif et de la progression narrative.
-- Composant Paper2D remplaçable par un flipbook dans un Blueprint dérivé du héros.
+- Sprites Paper2D du héros : repos/marche selon le déplacement et direction relative à la caméra.
+- Geste de combat à l'attaque, geste magique au recrutement ; aperçus des sept animations du héros.
+- Mousse comme compagnon de départ, Luciolle et Roncinet visibles et recrutables.
+- Carnet en jeu avec cinq planches de chara design, dont le frère en tenue élégante.
+- Module Editor d'import reproductible : 160 sprites, 40 flipbooks, 15 textures.
 
-**Validation :** les règles de combat et de recrutement ont des tests C++ autonomes. Unreal Editor/UnrealBuildTool ne sont pas présents dans l'environnement de création : la compilation du module, l'ouverture de la scène et l'export Android/iOS restent à valider sur une machine équipée. Une réussite de la CI des règles ne prouve pas que le projet Unreal compile.
+**Validation :** les règles de combat/recrutement, les directions de sprites et les atlas ont des tests autonomes. Unreal Editor/UnrealBuildTool ne sont pas présents dans l'environnement de création : la compilation du module, l'ouverture de la scène et l'export Android/iOS restent à valider sur une machine équipée. Une réussite de la CI des règles ne prouve pas que le projet Unreal compile.
 
 ## Premier lancement
 
 1. Installer **Unreal Engine 5.8** et les outils C++ adaptés à votre système.
 2. Cloner ce dépôt. Installer Git LFS avant d'ajouter des textures, cartes ou autres assets binaires.
 3. Ouvrir `FinalTower.uproject` et accepter la génération/compilation des modules ; ou générer les fichiers de projet puis compiler la cible `FinalTowerEditor` en Development Editor.
-4. Dans l'éditeur, lancer **Play**. La carte de démarrage `/Engine/Maps/Entry` reçoit le mode de jeu natif, qui construit la scène de test.
+4. Attendre la fin de l'import automatique des images (`FINAL TOWER art ready` dans le journal), puis lancer **Play**. La carte de démarrage `/Engine/Maps/Entry` reçoit le mode de jeu natif, qui construit la scène de test.
 
-Voir [le guide de démarrage](Docs/DEMARRAGE.md) pour les contrôles, les vérifications et le mobile.
+Voir [le guide de démarrage](Docs/DEMARRAGE.md) pour les contrôles et [le guide des images](Docs/ART.md) pour l'import automatique, le Carnet et la cuisson mobile.
 
 ## Essayer la boucle
 
@@ -46,7 +50,10 @@ Une victoire sans recrutement laisse la rencontre disponible ; la défaite soign
 | `Source/FinalTower/*/FTAdventureSubsystem.*` | Collection, rencontres, dialogue, sauvegarde |
 | `Source/FinalTower/*/FTPrototype.*` | Héros, contrôles tactiles, caméra, HUD et scène de test |
 | `Docs/` | Vision, décisions provisoires et démarrage |
-| `Tests/` | Tests autonomes des règles |
+| `ArtSource/` | PNG originaux, atlas préparés, catalogue et manifeste |
+| `Source/FinalTowerEditor/` | Import automatique et construction des assets Paper2D |
+| `Tools/` | Préparation reproductible des planches |
+| `Tests/` | Tests autonomes des règles et des atlas |
 
 ## Tester les règles sans Unreal
 
@@ -59,4 +66,4 @@ Ce test couvre le recrutement répété, les actions après la fin d'un combat, 
 
 ## Prochain jalon
 
-Compiler et jouer cette boucle dans Unreal, puis tester sur un téléphone Android avant de produire une première petite zone artistique. La portée initiale est un village, un chemin, une rencontre et une histoire courte. L'univers global, le rôle de la tour et le système de progression restent à définir ensemble.
+Compiler les modules dans Unreal, vérifier l'import des images et jouer la boucle, puis tester la cuisson sur un téléphone Android avant de produire une première petite zone artistique. La portée initiale est un village, un chemin, une rencontre et une histoire courte. L'univers global, le rôle de la tour et le système de progression restent à définir ensemble.

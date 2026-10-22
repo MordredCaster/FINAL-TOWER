@@ -9,5 +9,6 @@ public class FinalTowerEditorTarget : TargetRules
         DefaultBuildSettings = BuildSettingsVersion.V5;
         IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
         ExtraModuleNames.Add("FinalTower");
+        ExtraModuleNames.Add("FinalTowerEditor");
     }
 }

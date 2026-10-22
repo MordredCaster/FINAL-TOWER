@@ -14,6 +14,8 @@ Documentation Epic : [configuration Android](https://dev.epicgames.com/documenta
 
 Ouvrir `FinalTower.uproject`. Si les modules ne peuvent pas être compilés automatiquement, générer les fichiers de projet et compiler `FinalTowerEditor`, configuration Development Editor. Ouvrir ensuite le projet et lancer Play en mode Selected Viewport ou New Editor Window.
 
+Au premier lancement, attendre la fin de l'import automatique décrit dans [ART.md](ART.md). Le héros et les monstres utilisent les sprites préparés ; les planches de chara design sont accessibles avec le bouton **Carnet**.
+
 La scène géométrique est construite par `AFTPrototypeGameMode::BeginPlay` dans la carte moteur `/Engine/Maps/Entry`. Les BasicShapes sont incluses explicitement dans la cuisson. Les paramètres de projet choisissent ce mode de jeu globalement. Si une carte de travail est créée ultérieurement, vérifier qu'elle conserve ce mode ou son remplaçant.
 
 ## Commandes
@@ -59,8 +61,6 @@ Les sauvegardes utilisent le slot `FinalTower_Prototype_v1`. Pour reprendre à z
 
 Ni compilation Unreal, ni cuisson, ni installation Android/iOS n'ont été exécutées dans l'environnement de création de ce dépôt.
 
-## Ajouter les graphismes ensuite
+## Personnaliser les graphismes
 
-Créer un Blueprint dérivé de `FTExplorer`, affecter un flipbook Paper2D au composant `PixelVisual` et ajuster sa taille et son point d'ancrage. Le placeholder se masque au lancement lorsqu'un flipbook existe. Choisir ce Blueprint comme Default Pawn Class dans un mode de jeu dérivé, puis affecter ce mode dans les paramètres/cartes du projet.
-
-Le composant tourne vers la caméra. Il n'existe pas encore de sélection d'animations par direction ni d'animation marche/repos ; cela sera ajouté avec le premier vrai sprite. Remplacer ensuite les marqueurs de PNJ et de monstre et le décor géométrique. Importer les assets dans `Content/`, avec Git LFS activé avant leur ajout. Ne pas placer de clés, keystores ou mots de passe de signature dans le dépôt.
+Les images actuelles sont déjà reliées au code et importées automatiquement. Voir [ART.md](ART.md) pour leur usage, le découpage, les chemins et les vérifications. Pour remplacer un visuel, modifier les sources dans `ArtSource/` et régénérer les atlas avant de rouvrir l'éditeur. Les animations de marche des monstres et les sprites du frère restent à créer.

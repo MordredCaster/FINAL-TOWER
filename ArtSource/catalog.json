@@ -1,0 +1,21 @@
+{
+  "clips": [
+    {"actor":"hero","action":"idle","source":"ArtSource/Sprites/hero/idle.png","height":192,"fps":4,"loop":true},
+    {"actor":"hero","action":"walk","source":"ArtSource/Sprites/hero/walk.png","height":192,"fps":8,"loop":true},
+    {"actor":"hero","action":"combat","source":"ArtSource/Sprites/hero/combat.png","height":192,"fps":8,"loop":false},
+    {"actor":"hero","action":"spell","source":"ArtSource/Sprites/hero/spell.png","height":192,"fps":6,"loop":false},
+    {"actor":"hero","action":"sit","source":"ArtSource/Sprites/hero/sit.png","height":144,"fps":4,"loop":true},
+    {"actor":"hero","action":"hurt","source":"ArtSource/Sprites/hero/hurt.png","height":192,"fps":8,"loop":false},
+    {"actor":"hero","action":"dying","source":"ArtSource/Sprites/hero/dying.png","height":192,"fps":5,"loop":false},
+    {"actor":"mousse","action":"idle","source":"ArtSource/Sprites/mousse/idle.png","height":144,"fps":4,"loop":true},
+    {"actor":"roncinet","action":"idle","source":"ArtSource/Sprites/roncinet/idle.png","height":112,"fps":4,"loop":true},
+    {"actor":"luciolle","action":"idle","source":"ArtSource/Sprites/luciolle/idle.png","height":96,"fps":8,"loop":true}
+  ],
+  "concepts": [
+    {"id":"hero","source":"ArtSource/Concepts/hero.png","destination":"/Game/GeneratedArt/Concepts","texture_name":"T_hero"},
+    {"id":"brother","source":"ArtSource/Concepts/brother.png","destination":"/Game/GeneratedArt/Concepts","texture_name":"T_brother"},
+    {"id":"mousse","source":"ArtSource/Concepts/mousse.png","destination":"/Game/GeneratedArt/Concepts","texture_name":"T_mousse"},
+    {"id":"roncinet","source":"ArtSource/Concepts/roncinet.png","destination":"/Game/GeneratedArt/Concepts","texture_name":"T_roncinet"},
+    {"id":"luciolle","source":"ArtSource/Concepts/luciolle.png","destination":"/Game/GeneratedArt/Concepts","texture_name":"T_luciolle"}
+  ]
+}

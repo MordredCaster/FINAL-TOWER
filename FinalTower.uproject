@@ -3,6 +3,9 @@
   "EngineAssociation": "5.8",
   "Category": "Games",
   "Description": "Mobile adventure RPG prototype: exploration, monster friendship and intimate stories.",
-  "Modules": [{ "Name": "FinalTower", "Type": "Runtime", "LoadingPhase": "Default" }],
+  "Modules": [
+    { "Name": "FinalTower", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "FinalTowerEditor", "Type": "Editor", "LoadingPhase": "PostEngineInit" }
+  ],
   "Plugins": [{ "Name": "Paper2D", "Enabled": true }]
 }
