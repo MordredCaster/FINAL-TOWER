@@ -37,16 +37,41 @@ void UFTAdventureSubsystem::Initialize(FSubsystemCollectionBase& Collection)
         MakeSpecies(TEXT("luciolle"), TEXT("Luciolle"), TEXT("Magie lumineuse")),
         MakeSpecies(TEXT("roncinet"), TEXT("Roncinet"), TEXT("Charge et protection"))
     };
-    const bool bHadSave = UGameplayStatics::DoesSaveGameExist(SaveSlot, 0);
-    const bool bLoaded = LoadProgress();
-    if (!bLoaded)
-    {
-        AddFriend(TEXT("mousse"));
-        Bag = StarterInventory();
-        Message = TEXT("Mousse vous accompagne. Une gardienne attend près de la lanterne.");
-    }
-    // Persist migrations once; loading never refills an existing inventory or discovery.
-    if ((bLoaded || !bHadSave) && !SaveProgress()) Message += TEXT(" Sauvegarde impossible : réessayez avec Sauver.");
+    // Opening the title screen must never create or overwrite a save.
+    Message = TEXT("Choisissez Continuer ou Nouvelle partie.");
+}
+
+bool UFTAdventureSubsystem::HasSaveGame() const
+{
+    return UGameplayStatics::DoesSaveGameExist(SaveSlot, 0);
+}
+
+bool UFTAdventureSubsystem::CanContinueGame() const
+{
+    return ReadValidatedSave() != nullptr;
+}
+
+bool UFTAdventureSubsystem::StartNewGame(bool bConfirmOverwrite)
+{
+    if (bSessionStarted || (HasSaveGame() && !bConfirmOverwrite)) return false;
+    UFTAdventureSave* Save = Cast<UFTAdventureSave>(UGameplayStatics::CreateSaveGameObject(UFTAdventureSave::StaticClass()));
+    if (!Save) return false;
+    const MonsterStats Stats = StatsAtLevel(FinalTowerRules::Species::Mousse, 1);
+    FFTMonsterFriend Starter;
+    Starter.InstanceId = FGuid::NewGuid();
+    Starter.SpeciesId = TEXT("mousse");
+    Starter.HP = Stats.MaxHP;
+    Starter.MP = Stats.MaxMP;
+    Save->Friends.Add(Starter);
+    Save->Party.Add(0);
+    const Inventory InitialBag = StarterInventory();
+    for (const Item& Entry : ItemCatalog())
+        Save->Items.Add(FName(UTF8_TO_TCHAR(Entry.Key)), InitialBag.Quantity(Entry.Id));
+    // Do not delete the old slot first or change the live session on write failure.
+    if (!UGameplayStatics::SaveGameToSlot(Save, SaveSlot, 0)) return false;
+    ApplySave(Save);
+    Message = TEXT("Mousse vous accompagne. Une gardienne attend près de la lanterne.");
+    return true;
 }
 
 const FFTMonsterSpecies* UFTAdventureSubsystem::FindSpecies(FName Id) const
@@ -585,7 +610,7 @@ bool UFTAdventureSubsystem::TogglePartyMember(int32 Index)
 
 bool UFTAdventureSubsystem::SaveProgress()
 {
-    if (bInBattle || !Dialogue.IsEmpty()) return false;
+    if (!bSessionStarted || bInBattle || !Dialogue.IsEmpty()) return false;
     UFTAdventureSave* Save = Cast<UFTAdventureSave>(UGameplayStatics::CreateSaveGameObject(UFTAdventureSave::StaticClass()));
     if (!Save) return false;
     Save->Version = 4;
@@ -602,15 +627,40 @@ bool UFTAdventureSubsystem::SaveProgress()
 
 bool UFTAdventureSubsystem::LoadProgress()
 {
-    if (bInBattle || !Dialogue.IsEmpty() || !UGameplayStatics::DoesSaveGameExist(SaveSlot, 0)) return false;
+    if (bInBattle || !Dialogue.IsEmpty()) return false;
+    const UFTAdventureSave* Save = ReadValidatedSave();
+    if (!Save) return false;
+    ApplySave(Save);
+    // Persist older schemas only after the player explicitly chooses Continue.
+    if (Save->Version < 4 && !SaveProgress()) Message += TEXT(" Sauvegarde impossible : réessayez avec Sauver.");
+    return true;
+}
+
+const UFTAdventureSave* UFTAdventureSubsystem::ReadValidatedSave() const
+{
+    if (!HasSaveGame()) return nullptr;
     const UFTAdventureSave* Save = Cast<UFTAdventureSave>(UGameplayStatics::LoadGameFromSlot(SaveSlot, 0));
-    if (!Save || (Save->Version < 1 || Save->Version > 4) || Save->Friends.IsEmpty() || Save->Friends.Num() > 1000) return false;
+    if (!Save || (Save->Version < 1 || Save->Version > 4) || Save->Friends.IsEmpty() || Save->Friends.Num() > 1000) return nullptr;
     TSet<FGuid> Seen;
     for (const FFTMonsterFriend& Friend : Save->Friends)
     {
-        if (!FindSpecies(Friend.SpeciesId) || !Friend.InstanceId.IsValid() || Seen.Contains(Friend.InstanceId)) return false;
+        if (!FindSpecies(Friend.SpeciesId) || !Friend.InstanceId.IsValid() || Seen.Contains(Friend.InstanceId)) return nullptr;
         Seen.Add(Friend.InstanceId);
     }
+    return Save;
+}
+
+void UFTAdventureSubsystem::ApplySave(const UFTAdventureSave* Save)
+{
+    Battle = {};
+    EnemyId = NAME_None;
+    EnemyLevel = 1;
+    BattleParticipants.Reset();
+    bInBattle = bAwaitingReplacement = false;
+    Dialogue.Reset();
+    DialogueLines.Reset();
+    DialogueIndex = 0;
+    bFinishStoryAfterDialogue = bKeeperDialogue = bFinishWoundedAfterDialogue = false;
     TArray<FFTMonsterFriend> Validated = Save->Friends;
     for (FFTMonsterFriend& Friend : Validated)
     {
@@ -650,5 +700,6 @@ bool UFTAdventureSubsystem::LoadProgress()
     Message = Save->Version == 1 ? TEXT("Ancienne sauvegarde retrouvée : équipe et PM initialisés, compagnons conservés.") :
         TEXT("Aventure retrouvée : compagnons, sac, découvertes et journal restaurés.");
     if (Save->Version < 3) Message += TEXT(" Sac de départ reçu : 3 baies, 2 rosées et 2 friandises.");
-    return true;
+    bSessionStarted = true;
 }
+

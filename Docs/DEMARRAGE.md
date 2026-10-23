@@ -18,6 +18,29 @@ Au premier lancement, attendre la fin de l'import automatique décrit dans [ART.
 
 La scène géométrique est construite par `AFTPrototypeGameMode::BeginPlay` dans la carte moteur `/Engine/Maps/Entry`. Les BasicShapes sont incluses explicitement dans la cuisson. Les paramètres de projet choisissent ce mode de jeu globalement. Si une carte de travail est créée ultérieurement, vérifier qu'elle conserve ce mode ou son remplaçant.
 
+## Menu principal (0.6)
+
+Au lancement de Play, le menu principal apparaît au-dessus de la scène. Son fond bleu nuit, son emblème de tour, ses cadres dorés et ses boutons sont dessinés en code, sans nouvelles images ni import d'assets.
+
+- **Continuer** charge le slot existant et ses migrations. Il est grisé si aucun fichier valide n'est disponible.
+- **Nouvelle partie** commence avec Mousse, 3 baies, 2 rosées et 2 friandises. Si un fichier existe, même illisible, une confirmation est obligatoire. **Annuler** est le choix sélectionné par défaut.
+- Souris ou tactile : toucher le bouton. Clavier : Haut/Bas ou Tab, puis Entrée ou Espace ; Échap annule la confirmation (dans PIE, l'éditeur peut intercepter Échap pour arrêter Play).
+- Rien n'est écrit lors de l'ouverture du menu ou de l'annulation. Les déplacements, interactions et raccourcis du jeu sont bloqués jusqu'au choix d'une partie.
+- Une erreur de chargement ou de création garde le menu affiché avec un message. La nouvelle partie est écrite avant d'appliquer son état en mémoire, sans suppression préalable du slot.
+
+Ce lot couvre uniquement l'écran de démarrage. Les menus du sac, de l'équipe et du journal gardent leur présentation existante.
+
+Vérifications à effectuer **dans Unreal**, après compilation :
+
+1. Dans un profil de test sans sauvegarde, ouvrir Play : Continuer grisé ; aucun fichier créé avant Nouvelle partie. Tester I, J, E, Tab et un glissement hors bouton : aucun accès au jeu.
+2. Choisir Nouvelle partie : entrée dans la scène, un seul Mousse, sac de départ, quêtes et découvertes à zéro. Maintenir le doigt après le clic : pas de déplacement involontaire.
+3. Modifier la progression, sauvegarder, arrêter et relancer Play : Continuer actif. Le choisir et retrouver compagnons, inventaire, quêtes et découvertes, sans nouvelle distribution d'objets.
+4. Relancer Play, choisir Nouvelle partie puis Annuler : la sauvegarde reste inchangée ; Continuer retrouve la même partie.
+5. Relancer Play, choisir Nouvelle partie puis Recommencer : vérifier le retour à zéro de l'équipe, du sac et des quêtes. Double-clic rapide : une seule création.
+6. Avec une copie de test illisible/incompatible : Continuer grisé ; Nouvelle partie demande toujours confirmation. Avec un dossier de sauvegarde non inscriptible : rester au menu avec un message d'erreur.
+7. Tester les anciennes sauvegardes v1–v3 avec Continuer ; vérifier la migration et les compagnons conservés.
+8. Vérifier cadrage, contraste, textes et cibles tactiles en paysage 16:9, 16:10, 4:3 et sur téléphone. La compilation Unreal, le rendu Canvas et les écritures réelles du slot restent à valider ; les tests portables ne les exécutent pas.
+
 ## Commandes
 
 | Action | Téléphone / souris | Clavier |
@@ -41,18 +64,18 @@ Un seul doigt est géré dans ce socle. La souris fonctionne sans activer Use Mo
 Ces vérifications **restent à exécuter dans le moteur** :
 
 1. Compiler la cible Editor sans erreur UHT ni erreur C++.
-2. Lancer la scène ; vérifier le sol, les formes, la caméra, la lumière et les textes.
+2. Lancer Play, choisir Nouvelle partie ou Continuer ; vérifier le sol, les formes, la caméra, la lumière et les textes.
 3. Marcher au clavier et par glissement de souris ; confirmer les collisions avec la maison et les limites de zone.
 4. Approcher la gardienne ; dérouler ses répliques. Vérifier que le héros s'arrête pendant le dialogue.
 5. Rejoindre la créature ; vérifier que les déplacements sont suspendus pendant le combat.
 6. Attaquer trois fois avec Mousse (la créature passe de 30 à 9 PV), puis tenter l'amitié. La réussite reste aléatoire ; réessayer si nécessaire.
 7. Vérifier qu'une réussite ajoute un seul compagnon, masque la créature dans le monde et met à jour l'objectif.
 8. Retourner parler à la gardienne ; terminer le dialogue et vérifier l'objectif final.
-9. Changer de compagnon, sauver, arrêter puis relancer Play : collection, PV, compagnon actif et histoire doivent être restaurés. La position revient au centre.
+9. Changer de compagnon, sauver, arrêter puis relancer Play et choisir Continuer : collection, PV, compagnon actif et histoire doivent être restaurés. La position revient au centre.
 10. Sur une nouvelle sauvegarde, tester fuite, victoire sans recrutement et défaite ; la rencontre doit rester disponible.
 11. Vérifier qu'un clic/toucher n'active pas deux fois une action et qu'une action d'un combat terminé ne donne pas un second compagnon.
 
-Les sauvegardes utilisent le slot `FinalTower_Prototype_v1`. Pour reprendre à zéro dans l'éditeur, arrêter le jeu puis supprimer uniquement son fichier de sauvegarde local dans `Saved/SaveGames/`. Les sessions PIE partagent ce slot : éviter plusieurs instances simultanées pour ce prototype.
+Les sauvegardes utilisent le slot `FinalTower_Prototype_v1`. Pour reprendre à zéro, relancer Play, choisir **Nouvelle partie**, puis confirmer **Recommencer**. Les sessions PIE partagent ce slot : éviter plusieurs instances simultanées pour ce prototype.
 
 ## Sur téléphone
 
@@ -106,3 +129,4 @@ Parcours supplémentaire à vérifier dans Unreal :
 9. Avec deux cibles à portée, vérifier que l’invite et l’action concernent la cible la plus proche ; vérifier les six boutons en paysage tactile, J et I, et la lecture complète des dialogues.
 
 Ces scénarios dans le moteur restent à exécuter. Les règles indépendantes d’Unreal sont testées automatiquement. Voir [EXPLORATION.md](EXPLORATION.md) pour les emplacements et les sauvegardes.
+

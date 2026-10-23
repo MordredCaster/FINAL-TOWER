@@ -109,6 +109,9 @@ void AFTPrototypeController::PlayerTick(float DeltaTime)
     UFTAdventureSubsystem* State = Adventure(this);
     if (!State) return;
 
+    AFTPrototypeHUD* UI = Cast<AFTPrototypeHUD>(GetHUD());
+    const bool bTitleWasOpen = !State->HasStartedGame() || (UI && UI->IsMainMenuOpen());
+
     float PointerX = 0, PointerY = 0;
     bool bDown = false;
     GetInputTouchState(ETouchIndex::Touch1, PointerX, PointerY, bDown);
@@ -117,16 +120,21 @@ void AFTPrototypeController::PlayerTick(float DeltaTime)
     const FVector2D Pointer(PointerX, PointerY);
     if (bDown && !bPointerWasDown)
     {
-        AFTPrototypeHUD* UI = Cast<AFTPrototypeHUD>(GetHUD());
         const bool bConsumed = UI && UI->HandleTap(Pointer);
-        bDragging = !bConsumed && !State->bInBattle && State->Dialogue.IsEmpty();
+        bDragging = !bTitleWasOpen && !bConsumed && !State->bInBattle && State->Dialogue.IsEmpty();
         DragOrigin = Pointer;
     }
     DragPosition = Pointer;
     if (!bDown) bDragging = false;
     bPointerWasDown = bDown;
 
-    AFTPrototypeHUD* UI = Cast<AFTPrototypeHUD>(GetHUD());
+    if (bTitleWasOpen)
+    {
+        if (UI && UI->IsMainMenuOpen()) UI->HandleMainMenuKeys();
+        if (GetPawn() && GetPawn()->GetMovementComponent()) GetPawn()->GetMovementComponent()->StopMovementImmediately();
+        bDragging = false;
+        return; // Starting a session never forwards this tap/key to gameplay.
+    }
     const AFTExplorer* Explorer = Cast<AFTExplorer>(GetPawn());
     if (WasInputKeyJustPressed(EKeys::I) && UI && State->Dialogue.IsEmpty() && !State->bAwaitingReplacement)
         UI->ToggleInventory();
@@ -181,7 +189,7 @@ void AFTPrototypeController::PlayerTick(float DeltaTime)
 void AFTPrototypeController::Interact()
 {
     UFTAdventureSubsystem* State = Adventure(this);
-    if (!State || State->bInBattle) return;
+    if (!State || !State->HasStartedGame() || State->bInBattle) return;
     if (!State->Dialogue.IsEmpty()) { State->AdvanceDialogue(); return; }
     AFTPrototypeGameMode* Mode = Cast<AFTPrototypeGameMode>(UGameplayStatics::GetGameMode(this));
     if (Mode && GetPawn()) Mode->InteractAt(GetPawn()->GetActorLocation());
@@ -309,7 +317,7 @@ void AFTPrototypeGameMode::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     const UFTAdventureSubsystem* State = Adventure(this);
-    if (!State) return;
+    if (!State || !State->HasStartedGame()) return;
     if (bWasInBattle && !State->bInBattle &&
         (State->GetBattle().Result == FinalTowerRules::Outcome::Victory || State->GetBattle().Result == FinalTowerRules::Outcome::Recruited))
     {
@@ -472,6 +480,7 @@ void AFTPrototypeHUD::DrawHUD()
     Scale = FMath::Max(0.1f, static_cast<float>(Canvas->SizeY) / 720.0f);
     ViewWidth = Canvas->SizeX / Scale;
     ViewHeight = 720;
+    if (IsMainMenuOpen()) { DrawMainMenu(); return; }
     if (State->bAwaitingReplacement) { bTeamOpen = true; bInventoryOpen = bJournalOpen = false; }
     if (bTeamOpen) { DrawTeam(); return; }
     if (bInventoryOpen) { DrawInventory(); return; }
@@ -479,7 +488,7 @@ void AFTPrototypeHUD::DrawHUD()
     if (bArtBookOpen) { DrawArtBook(); return; }
     const float Margin = 40;
     DrawRect(FLinearColor(0.025f, 0.05f, 0.075f, 0.94f), 0, 0, Canvas->SizeX, 126 * Scale);
-    Label(TEXT("FINAL TOWER — prototype 0.5"), Margin, 20, FLinearColor(1, 0.8, 0.4));
+    Label(TEXT("FINAL TOWER — prototype 0.6"), Margin, 20, FLinearColor(1, 0.8, 0.4));
     Wrapped(State->GetObjective(), Margin, 55, ViewWidth - 2 * Margin);
     Label(TEXT("J : journal de quêtes • Carnet : personnages et bestiaire"), Margin, 96, FLinearColor(0.7, 0.75, 0.8), 0.8f);
 
@@ -596,17 +605,20 @@ bool AFTPrototypeHUD::HandleTap(FVector2D Position)
         if (Position.X >= Entry.Position.X && Position.Y >= Entry.Position.Y &&
             Position.X <= Entry.Position.X + Entry.Size.X && Position.Y <= Entry.Position.Y + Entry.Size.Y)
         {
-            Act(Entry.Action);
+            const FName Action = Entry.Action;
+            Buttons.Reset(); // Do not retain hit targets from a page that just closed.
+            Act(Action);
             return true;
         }
     }
-    return false;
+    return IsMainMenuOpen(); // Blank space and disabled buttons cannot move the hero.
 }
 
 void AFTPrototypeHUD::Act(FName Action)
 {
     UFTAdventureSubsystem* State = Adventure(this);
     if (!State) return;
+    if (IsMainMenuOpen()) { MainMenuAction(Action); return; }
     if (Action == TEXT("interact"))
     {
         if (AFTPrototypeController* Control = Cast<AFTPrototypeController>(PlayerOwner)) Control->Interact();
@@ -676,6 +688,7 @@ void AFTPrototypeHUD::Act(FName Action)
 
 void AFTPrototypeHUD::ToggleInventory()
 {
+    if (IsMainMenuOpen()) return;
     const UFTAdventureSubsystem* State = Adventure(this);
     if (!State || !State->Dialogue.IsEmpty() || State->bAwaitingReplacement) return;
     bInventoryOpen = !bInventoryOpen;
@@ -684,6 +697,7 @@ void AFTPrototypeHUD::ToggleInventory()
 
 void AFTPrototypeHUD::ToggleJournal()
 {
+    if (IsMainMenuOpen()) return;
     const UFTAdventureSubsystem* State = Adventure(this);
     if (!State || !State->Dialogue.IsEmpty() || State->bAwaitingReplacement) return;
     bJournalOpen = !bJournalOpen;
@@ -871,3 +885,4 @@ void AFTPrototypeHUD::DrawArtBook()
     Button(TEXT("nextpage"), TEXT("Suivant"), 226, 642, 170);
     Button(TEXT("closebook"), TEXT("Fermer"), ViewWidth - 210, 642, 170);
 }
+

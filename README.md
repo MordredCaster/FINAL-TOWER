@@ -4,11 +4,15 @@ Un RPG mobile d'aventure : **explorer, se lier d'amitié avec des monstres et vi
 
 Projet natif **Unreal Engine 5.8**, paysage, solo hors ligne. Direction visée : personnages 2D en pixel art dans des décors 3D simples, avec une caméra fixe et une lumière soignée. Dragon Quest V inspire le sentiment d'aventure ; Octopath Traveler et Tactics Ogre: Reborn sont des références visuelles, avec des personnages et un univers originaux.
 
-## État du projet — 0.5
+## État du projet — 0.6
 
 Socle de code et scène de test 3D générée au lancement, maintenant reliés aux sprites du héros et des trois monstres. **Les 15 images sources et 10 atlas sont inclus ; les assets Paper2D sont construits automatiquement au premier lancement de l'éditeur.** Les décors restent géométriques. La compilation Unreal et le rendu sur appareil n'ont pas encore été validés ; aucun APK n'est fourni.
 
 Fonctionnalités implémentées dans le code :
+
+- Menu principal natif sans texture supplémentaire : Continuer, Nouvelle partie et confirmation de remplacement.
+- Continuer est grisé sans sauvegarde valide ; le menu ne crée ni ne modifie de sauvegarde au lancement.
+- Navigation souris, tactile et clavier ; les commandes du jeu restent bloquées sur le menu.
 
 - Déplacement au clavier, à la souris ou au doigt avec un glissement de type joystick flottant.
 - Petite zone 3D, gardienne et créature avec interaction à proximité.
@@ -30,20 +34,20 @@ Fonctionnalités implémentées dans le code :
 - Carnet en jeu avec cinq planches de chara design, dont le frère en tenue élégante.
 - Module Editor d'import reproductible : 160 sprites, 40 flipbooks, 15 textures.
 
-**Validation :** les règles de combat/recrutement, la progression/les techniques/les relais, les objets/le butin, les découvertes/la quête/la migration des sauvegardes, les directions de sprites et les atlas ont des tests autonomes. Unreal Editor/UnrealBuildTool ne sont pas présents dans l'environnement de création : la compilation du module, l'ouverture de la scène et l'export Android/iOS restent à valider sur une machine équipée. Une réussite de la CI des règles ne prouve pas que le projet Unreal compile.
+**Validation :** les transitions du menu (annulation, confirmation, double activation, échec de lecture/écriture), les règles de combat/recrutement, la progression/les techniques/les relais, les objets/le butin, les découvertes/la quête/la migration des sauvegardes, les directions de sprites et les atlas ont des tests autonomes. Unreal Editor/UnrealBuildTool ne sont pas présents dans l'environnement de création : la compilation du module, l'ouverture de la scène et l'export Android/iOS restent à valider sur une machine équipée. Une réussite de la CI des règles ne prouve pas que le projet Unreal compile.
 
 ## Premier lancement
 
 1. Installer **Unreal Engine 5.8** et les outils C++ adaptés à votre système.
 2. Cloner ce dépôt. Installer Git LFS avant d'ajouter des textures, cartes ou autres assets binaires.
 3. Ouvrir `FinalTower.uproject` et accepter la génération/compilation des modules ; ou générer les fichiers de projet puis compiler la cible `FinalTowerEditor` en Development Editor.
-4. Attendre la fin de l'import automatique des images (`FINAL TOWER art ready` dans le journal), puis lancer **Play**. La carte de démarrage `/Engine/Maps/Entry` reçoit le mode de jeu natif, qui construit la scène de test.
+4. Attendre la fin de l'import automatique des images (`FINAL TOWER art ready` dans le journal), puis lancer **Play**. La carte de démarrage `/Engine/Maps/Entry` reçoit le mode de jeu natif, qui construit la scène de test. Le menu apparaît : choisir **Nouvelle partie** ou **Continuer** pour entrer dans le village.
 
 Voir [le guide de démarrage](Docs/DEMARRAGE.md) pour les contrôles et [le guide des images](Docs/ART.md) pour l'import automatique, le Carnet et la cuisson mobile. Les [règles de progression](Docs/PROGRESSION.md) détaillent les techniques et l’équipe ; le [guide de l’inventaire](Docs/INVENTAIRE.md) explique les objets et le butin. Le [guide d’exploration](Docs/EXPLORATION.md) décrit les découvertes, la nouvelle quête et le journal.
 
 ## Essayer la boucle
 
-Approcher la **Gardienne**, puis choisir **Interagir**. Lire ses trois répliques. Rejoindre la **Lumière des roseaux**, interagir et attaquer avec modération : un monstre vaincu ne peut pas être recruté durant ce combat. Choisir **Tendre la main**, puis retourner auprès de la gardienne une fois Luciolle recrutée.
+Choisir **Nouvelle partie** ou **Continuer** sur le menu principal, puis approcher la **Gardienne**, puis choisir **Interagir**. Lire ses trois répliques. Rejoindre la **Lumière des roseaux**, interagir et attaquer avec modération : un monstre vaincu ne peut pas être recruté durant ce combat. Choisir **Tendre la main**, puis retourner auprès de la gardienne une fois Luciolle recrutée.
 
 **Sac** ou **I** ouvre l’inventaire. Le départ donne 3 baies (+25 PV), 2 rosées (+8 PM) et 2 friandises (+20 points de recrutement). Hors combat, choisir un soin puis un compagnon ; en combat, les soins ciblent l’actif et tout objet utilisé provoque une riposte. Une victoire sur Roncinet rapporte une baie et une friandise, sur Luciolle une rosée.
 
@@ -57,6 +61,8 @@ Après victoire ou recrutement, les rencontres d'essai réapparaissent au bout d
 |---|---|
 | `FinalTower.uproject` | Projet UE 5.8, module et plugin Paper2D |
 | `Config/` | Mobile, rendu, carte de démarrage et contrôles |
+| `Source/FinalTower/Private/FTMainMenu.cpp` | Menu principal Canvas, contrôles et confirmation |
+| `Source/FinalTower/Public/FTMainMenuRules.h` | Transitions du menu et autorisation du remplacement |
 | `Source/FinalTower/Public/FTBattleRules.h` | Règles de combat indépendantes du moteur |
 | `Source/FinalTower/Public/FTInventoryRules.h` | Catalogue des objets, piles, soins, butin et migration du sac |
 | `Source/FinalTower/Public/FTExplorationRules.h` | Découvertes, étapes de la quête et récompenses uniques |
@@ -80,3 +86,4 @@ Ce test couvre le recrutement répété, les actions après la fin d'un combat, 
 ## Prochain jalon
 
 Compiler les modules dans Unreal, vérifier l'import des images et jouer la boucle, puis tester la cuisson sur un téléphone Android avant de produire une première petite zone artistique. La portée initiale est un village, un chemin, une rencontre et une histoire courte. L’univers global et le rôle de la tour restent à définir ensemble ; la progression et les objets sont encore à équilibrer en jeu.
+

@@ -5,6 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/HUD.h"
+#include "FTMainMenuRules.h"
 #include "FTPrototype.generated.h"
 
 class UBoxComponent;
@@ -97,14 +98,26 @@ class FINALTOWER_API AFTPrototypeHUD : public AHUD
 {
     GENERATED_BODY()
 public:
+    virtual void BeginPlay() override;
     virtual void DrawHUD() override;
     bool HandleTap(FVector2D Position);
-    bool IsMenuOpen() const { return bArtBookOpen || bTeamOpen || bInventoryOpen || bJournalOpen; }
-    void OpenTeam() { bTeamOpen = true; bInventoryOpen = bJournalOpen = false; TeamPage = 0; }
+    bool IsMainMenuOpen() const { return MainMenu.IsOpen(); }
+    bool IsMenuOpen() const { return IsMainMenuOpen() || bArtBookOpen || bTeamOpen || bInventoryOpen || bJournalOpen; }
+    void HandleMainMenuKeys();
+    void OpenTeam() { if (IsMainMenuOpen()) return; bTeamOpen = true; bInventoryOpen = bJournalOpen = false; TeamPage = 0; }
     void ToggleInventory();
     void ToggleJournal();
 
 private:
+    FinalTowerRules::MainMenu MainMenu;
+    bool bCanContinue = false;
+    bool bSaveExists = false;
+    int32 MainMenuFocus = 1;
+    FString MainMenuMessage;
+    void RefreshMainMenuSave();
+    void DrawMainMenu();
+    void MainMenuAction(FName Action);
+    void FinishMainMenuStart(bool bSucceeded);
     struct FButton
     {
         FName Action;
@@ -134,3 +147,4 @@ private:
     void DrawInventory();
     void DrawJournal();
 };
+

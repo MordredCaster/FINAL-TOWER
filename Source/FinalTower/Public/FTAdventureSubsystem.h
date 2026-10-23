@@ -129,6 +129,10 @@ public:
     UFUNCTION(BlueprintCallable) void AdvanceDialogue();
     UFUNCTION(BlueprintCallable) bool SaveProgress();
     UFUNCTION(BlueprintCallable) bool LoadProgress();
+    UFUNCTION(BlueprintPure) bool HasSaveGame() const;
+    UFUNCTION(BlueprintPure) bool CanContinueGame() const;
+    UFUNCTION(BlueprintPure) bool HasStartedGame() const { return bSessionStarted; }
+    UFUNCTION(BlueprintCallable) bool StartNewGame(bool bConfirmOverwrite = false);
     UFUNCTION(BlueprintCallable) void NextCompanion();
     UFUNCTION(BlueprintCallable) bool UseSkill(int32 SkillIndex);
     UFUNCTION(BlueprintCallable) bool SetActiveFriend(int32 RosterIndex);
@@ -156,6 +160,9 @@ public:
     FName GetEncounterId() const { return EnemyId; }
 
 private:
+    bool bSessionStarted = false;
+    const UFTAdventureSave* ReadValidatedSave() const;
+    void ApplySave(const UFTAdventureSave* Save);
     FinalTowerRules::Battle Battle;
     FName EnemyId;
     int32 EnemyLevel = 1;
@@ -174,3 +181,4 @@ private:
     FString AwardItems();
     FString GetLanternObjective() const;
 };
+

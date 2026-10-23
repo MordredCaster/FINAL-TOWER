@@ -32,6 +32,10 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -I Source/FinalTower/Public Tests/exploration_rules_test.cpp -o /tmp/finaltower-exploration
           /tmp/finaltower-exploration
+      - name: Check title menu and overwrite confirmation rules
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -I Source/FinalTower/Public Tests/main_menu_rules_test.cpp -o /tmp/finaltower-menu
+          /tmp/finaltower-menu
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -39,3 +43,4 @@ jobs:
         run: |
           python -m pip install 'Pillow>=10,<13'
           python Tests/check_art.py
+
